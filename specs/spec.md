@@ -29,7 +29,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 - **Auth:** NextAuth (JWT, Credentials), Rollen via `User.role`
 - **Storage (Mail-Anhänge):** lokaler Filestore unter `/public/uploads` (Dev). In Prod austauschbar.
 - **Excel:** `xlsx` (SheetJS) für Import/Export
-- **PDF/CSV-Bank-Import:** Erste Bank/George CSV (Standardformat siehe `specs/import-george/document.md`)
+- **Bank-Import:** Erste Bank/George **CSV oder XLSX** (Standardformat siehe `specs/import-george/document.md`); Idempotenz über `Transaction.externalRef` (Buchungsreferenz) + Cutoff anhand letzter Buchung pro Konto.
 - **Internationalisierung:** Deutsch (de-AT)
 - **Datumsformat:** dd.MM.yyyy, Währung EUR (de-AT)
 - **Clubjahr:** 1.7. – 30.6. (intern als ROTARY_YEAR_START_MONTH=7, Index 6). Laut User-Vorgabe: "endet jeweils am 30.6." → Clubjahr = 1.7.–30.6.
@@ -58,7 +58,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 | 1 | Authentifizierung & Rollen | [specs/auth/document.md](auth/document.md) | done |
 | 2 | Mitgliederverwaltung + Excel-Import | [specs/members/document.md](members/document.md) | done |
 | 3 | Konten (Haupt + Global Grant) & Buchungen | [specs/transactions/document.md](transactions/document.md) | done |
-| 4 | George-/Erste-Bank-Import (CSV) | [specs/import-george/document.md](import-george/document.md) | done |
+| 4 | George-/Erste-Bank-Import (CSV + XLSX, Cutoff + externalRef-Dedup) | [specs/import-george/document.md](import-george/document.md) | done |
 | 5 | Mitgliedsbeiträge, Forderungen & Mahnwesen | [specs/dues-dunning/document.md](dues-dunning/document.md) | done |
 | 6 | Auslagen-Verrechnung (Teilnahmelisten) | [specs/expenses-attendance/document.md](expenses-attendance/document.md) | done |
 | 7 | Budget & Liquiditätsplanung | [specs/budget-cashflow/document.md](budget-cashflow/document.md) | done |
@@ -91,7 +91,7 @@ ArchivedYear(id, clubYearLabel, fileId, summaryJson)
 
 ## Akzeptanzkriterien (übergeordnet)
 - Schatzmeister kann sich einloggen und ein neues Clubjahr eröffnen.
-- George-CSV-Datei kann hochgeladen werden, Buchungen werden importiert, Duplikate werden erkannt.
+- George-Datei (CSV oder XLSX) kann hochgeladen werden, neue Buchungen werden seit der letzten vorhandenen Buchung ergänzt, Duplikate werden erkannt (über Buchungsreferenz).
 - Mitgliedsbeitrag eines Mitglieds ohne EZ erscheint als offene Forderung; nach Bank-Eingang wird sie automatisch aufgelöst.
 - Budget pro Clubjahr je Kategorie ist erfassbar und im Bericht sichtbar.
 - Liquiditätsplanung: Tabelle der geplanten Cashflows + Liniendiagramm Saldo nach Datum.

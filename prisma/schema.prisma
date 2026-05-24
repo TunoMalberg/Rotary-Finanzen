@@ -121,6 +121,7 @@ model Transaction {
   source        String      @default("MANUAL") // IMPORT | MANUAL | ARCHIVE
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+  externalRef   String?     // Bank-eigene eindeutige Buchungsreferenz (z. B. George "Buchungsreferenz")
   isReconciled  Boolean     @default(false)
   attachmentId  String?
   attachment    Attachment? @relation(fields: [attachmentId], references: [id])
@@ -129,6 +130,7 @@ model Transaction {
   createdAt     DateTime    @default(now())
   deletedAt     DateTime?
 
+  @@unique([accountId, externalRef])
   @@index([accountId, clubYearId, date])
   @@index([memberId])
   @@index([categoryId])

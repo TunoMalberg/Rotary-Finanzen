@@ -1,32 +1,76 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertTriangle, Info, FileSpreadsheet } from "lucide-react";
 import { formatDate, formatEUR } from "@/lib/format";
 
 type PreviewRow = {
-  date: string; counterparty: string | null; purpose: string | null; amount: number;
-  category?: string | null; isDuplicate: boolean; matchedMember?: string | null;
+  date: string;
+  counterparty: string | null;
+  purpose: string | null;
+  amount: number;
+  category: string | null;
+  isDuplicate: boolean;
+  isSkippedOlder: boolean;
+  matchedMember: string | null;
+  externalRef: string | null;
 };
 
-export function ImportForm({ accounts, years, defaultClubYearId }: { accounts: { id: string; name: string; type: string }[]; years: { id: string; label: string }[]; defaultClubYearId: string }) {
+type PreviewResp = {
+  source: "csv" | "xlsx";
+  totalRows: number;
+  created: number;
+  duplicates: number;
+  skippedOlder: number;
+  autoMatched: number;
+  lastExistingDate: string | null;
+  importAll: boolean;
+  dryRun: boolean;
+  preview: PreviewRow[];
+};
+
+export function ImportForm({
+  accounts,
+  years,
+  defaultClubYearId,
+}: {
+  accounts: { id: string; name: string; type: string }[];
+  years: { id: string; label: string }[];
+  defaultClubYearId: string;
+}) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [accountId, setAccountId] = useState(accounts.find((a) => a.type === "MAIN")?.id ?? accounts[0]?.id);
+  const [accountId, setAccountId] = useState(
+    accounts.find((a) => a.type === "MAIN")?.id ?? accounts[0]?.id,
+  );
   const [clubYearId, setClubYearId] = useState(defaultClubYearId);
+  const [importAll, setImportAll] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<{ created: number; duplicates: number; autoMatched: number; totalRows: number; preview: PreviewRow[] } | null>(null);
+  const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  // Filter im Vorschau-Bereich
+  const [filter, setFilter] = useState<"all" | "new" | "dup" | "older">("all");
+  const visibleRows = useMemo(() => {
+    if (!preview) return [] as PreviewRow[];
+    if (filter === "all") return preview.preview;
+    if (filter === "new") return preview.preview.filter((r) => !r.isDuplicate && !r.isSkippedOlder);
+    if (filter === "dup") return preview.preview.filter((r) => r.isDuplicate);
+    return preview.preview.filter((r) => r.isSkippedOlder);
+  }, [preview, filter]);
+
   async function run(dryRun: boolean) {
     if (!file) return;
-    setBusy(true); setError(null); setDone(false);
+    setBusy(true);
+    setError(null);
+    setDone(false);
     const fd = new FormData();
     fd.append("file", file);
     fd.append("accountId", accountId ?? "");
     fd.append("clubYearId", clubYearId ?? "");
     fd.append("dryRun", dryRun ? "true" : "false");
+    fd.append("importAll", importAll ? "true" : "false");
     const res = await fetch("/api/import/george", { method: "POST", body: fd });
     setBusy(false);
     if (!res.ok) {
@@ -34,7 +78,7 @@ export function ImportForm({ accounts, years, defaultClubYearId }: { accounts: {
       setError(data?.error ?? "Import fehlgeschlagen.");
       return;
     }
-    const data = await res.json();
+    const data = (await res.json()) as PreviewResp;
     setPreview(data);
     if (!dryRun) {
       setDone(true);
@@ -49,20 +93,53 @@ export function ImportForm({ accounts, years, defaultClubYearId }: { accounts: {
           <div>
             <label className="text-xs font-semibold text-slate-700 mb-1 block">Konto</label>
             <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
             </select>
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-700 mb-1 block">Clubjahr</label>
             <select className="input" value={clubYearId} onChange={(e) => setClubYearId(e.target.value)}>
-              {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>{y.label}</option>
+              ))}
             </select>
           </div>
         </div>
+
         <div>
-          <label className="text-xs font-semibold text-slate-700 mb-1 block">CSV-Datei (George Export)</label>
-          <input type="file" accept=".csv,text/csv" className="input" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <label className="text-xs font-semibold text-slate-700 mb-1 block">
+            Bank-Datei (George Erste Bank, CSV oder XLSX)
+          </label>
+          <input
+            type="file"
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            className="input"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          {file && (
+            <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+              <FileSpreadsheet className="size-3.5" />
+              {file.name} · {(file.size / 1024).toFixed(1)} KB
+            </div>
+          )}
         </div>
+
+        <label className="flex items-start gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={importAll}
+            onChange={(e) => setImportAll(e.target.checked)}
+          />
+          <span>
+            Auch Zeilen <strong>vor</strong> der letzten vorhandenen Buchung importieren
+            (z. B. für initialen Vollimport). Ohne dieses Häkchen werden nur neue Buchungen
+            seit der letzten in der App vorhandenen Buchung ergänzt.
+          </span>
+        </label>
+
         {error && (
           <div role="alert" className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-3 flex items-start gap-2">
             <AlertTriangle className="size-4 shrink-0 mt-0.5" />
@@ -74,25 +151,82 @@ export function ImportForm({ accounts, years, defaultClubYearId }: { accounts: {
             <CheckCircle2 className="size-4" /> Import abgeschlossen.
           </div>
         )}
+
         <div className="flex gap-2 flex-wrap btn-row">
           <button className="btn-ghost" disabled={!file || busy} onClick={() => run(true)}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null} Vorschau
           </button>
           <button className="btn-primary" disabled={!file || busy} onClick={() => run(false)}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} Importieren
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}{" "}
+            Importieren
           </button>
         </div>
       </div>
 
       {preview && (
         <div className="card-soft overflow-hidden">
-          <div className="px-4 sm:px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm space-y-0.5">
-              <div><span className="font-semibold">{preview.totalRows}</span> Zeilen · <span className="font-semibold text-emerald-700">{preview.created} neu</span> · <span className="font-semibold text-amber-700">{preview.duplicates} Duplikate</span></div>
-              <div className="text-xs"><span className="font-semibold text-blue-700">{preview.autoMatched} Forderungen automatisch ausgeglichen</span></div>
+          <div className="px-4 sm:px-5 py-3 border-b space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm space-y-0.5">
+                <div>
+                  <span className="font-semibold">{preview.totalRows}</span> Zeilen ·{" "}
+                  <span className="font-semibold text-emerald-700">{preview.created} neu</span> ·{" "}
+                  <span className="font-semibold text-amber-700">{preview.duplicates} Duplikate</span>{" "}
+                  ·{" "}
+                  <span className="font-semibold text-slate-500">
+                    {preview.skippedOlder} älter übersprungen
+                  </span>
+                </div>
+                <div className="text-xs">
+                  <span className="font-semibold text-blue-700">
+                    {preview.autoMatched} Forderungen automatisch ausgeglichen
+                  </span>{" "}
+                  · Quelle: <span className="uppercase font-mono text-slate-500">{preview.source}</span>
+                </div>
+              </div>
+              <span className="text-xs text-slate-500">Vorschau (max. 200)</span>
             </div>
-            <span className="text-xs text-slate-500">Vorschau (max. 100)</span>
+            <div className="text-xs flex items-start gap-2 text-slate-600 bg-slate-50 border border-slate-200 rounded-md p-2">
+              <Info className="size-3.5 shrink-0 mt-0.5 text-blue-600" />
+              <div>
+                {preview.lastExistingDate ? (
+                  <>
+                    Letzte vorhandene Buchung im Konto:{" "}
+                    <strong>{formatDate(preview.lastExistingDate)}</strong>. Es werden nur
+                    neuere Zeilen importiert{preview.importAll ? " (Override aktiv – alle Zeilen)" : ""}.
+                  </>
+                ) : (
+                  <>Keine vorhandene Buchung im Konto – alle Zeilen werden importiert.</>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1 text-xs" role="tablist" aria-label="Vorschau-Filter">
+              {(
+                [
+                  { k: "all", label: `Alle (${preview.preview.length})` },
+                  { k: "new", label: `Neu (${preview.created})` },
+                  { k: "dup", label: `Duplikate (${preview.duplicates})` },
+                  { k: "older", label: `Älter (${preview.skippedOlder})` },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.k}
+                  role="tab"
+                  aria-selected={filter === f.k}
+                  onClick={() => setFilter(f.k)}
+                  className={`px-2.5 py-1 rounded-full border ${
+                    filter === f.k
+                      ? "bg-[#17458F] text-white border-[#17458F]"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
+
           <div className="table-stack sm:p-0 p-3">
             <div className="table-scroll max-h-[480px]">
               <table className="data-table">
@@ -108,21 +242,60 @@ export function ImportForm({ accounts, years, defaultClubYearId }: { accounts: {
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.preview.map((r, i) => (
-                    <tr key={i} className={r.isDuplicate ? "danger" : ""}>
-                      <td data-label="Datum" className="whitespace-nowrap">{formatDate(r.date)}</td>
-                      <td data-label="Gegenpartei" className="font-medium">{r.counterparty ?? "—"}</td>
-                      <td data-label="Zweck" className="text-slate-600 sm:max-w-[260px] sm:truncate">{r.purpose ?? "—"}</td>
-                      <td data-label="Kategorie">{r.category ? <span className="chip" style={{ background: "#17458F1A", color: "#17458F" }}>{r.category}</span> : "—"}</td>
-                      <td data-label="Mitglied" className="text-slate-500 text-xs">{r.matchedMember ?? "—"}</td>
-                      <td data-label="Status">
-                        {r.isDuplicate
-                          ? <span className="chip chip-cancelled">Duplikat</span>
-                          : <span className="chip chip-active">Neu</span>}
+                  {visibleRows.map((r, i) => (
+                    <tr
+                      key={`${r.externalRef ?? "x"}-${i}`}
+                      className={r.isDuplicate ? "danger" : r.isSkippedOlder ? "muted" : ""}
+                    >
+                      <td data-label="Datum" className="whitespace-nowrap">
+                        {formatDate(r.date)}
                       </td>
-                      <td data-label="Betrag" className={`text-right font-mono tabular ${r.amount >= 0 ? "amount-pos" : "amount-neg"}`}>{formatEUR(r.amount)}</td>
+                      <td data-label="Gegenpartei" className="font-medium">
+                        {r.counterparty ?? "—"}
+                      </td>
+                      <td data-label="Zweck" className="text-slate-600 sm:max-w-[260px] sm:truncate">
+                        {r.purpose ?? "—"}
+                      </td>
+                      <td data-label="Kategorie">
+                        {r.category ? (
+                          <span className="chip" style={{ background: "#17458F1A", color: "#17458F" }}>
+                            {r.category}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td data-label="Mitglied" className="text-slate-500 text-xs">
+                        {r.matchedMember ?? "—"}
+                      </td>
+                      <td data-label="Status">
+                        {r.isSkippedOlder ? (
+                          <span className="chip" style={{ background: "#E5E7EB", color: "#475569" }}>
+                            Älter – übersprungen
+                          </span>
+                        ) : r.isDuplicate ? (
+                          <span className="chip chip-cancelled">Duplikat</span>
+                        ) : (
+                          <span className="chip chip-active">Neu</span>
+                        )}
+                      </td>
+                      <td
+                        data-label="Betrag"
+                        className={`text-right font-mono tabular ${
+                          r.amount >= 0 ? "amount-pos" : "amount-neg"
+                        }`}
+                      >
+                        {formatEUR(r.amount)}
+                      </td>
                     </tr>
                   ))}
+                  {visibleRows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center text-sm text-slate-500 py-6">
+                        Keine Einträge in dieser Ansicht.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

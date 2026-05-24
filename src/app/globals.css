@@ -263,6 +263,7 @@ table.data-table td {
 }
 table.data-table tr:hover td { background: #fafbfc; }
 table.data-table tr.danger td { background: #fff1f2; }
+table.data-table tr.muted td { background: #f8fafc; color: #64748b; }
 
 /* Wrapper that gives mobile users tactile horizontal scroll */
 .table-scroll {
