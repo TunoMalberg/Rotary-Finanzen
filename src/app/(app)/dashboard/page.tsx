@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { getAccountBalance, getCategoryTotals, getCurrentClubYear } from "@/lib/dataAccess";
 import { computeRunningBalances } from "@/lib/runningBalance";
+import { getProjectTotals } from "@/lib/projectTotals";
 import { formatEUR, formatDate } from "@/lib/format";
 import Link from "next/link";
-import { ArrowUpRight, ArrowDownRight, Wallet, Mail, AlertTriangle, Receipt } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Wallet, Mail, AlertTriangle, Receipt, FolderKanban, ChevronRight } from "lucide-react";
 import { DashboardCharts } from "./DashboardCharts";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,11 @@ export default async function DashboardPage() {
     accountIds: [...new Set(recent.map((t) => t.accountId))],
     clubYearIds: [cy.id],
   });
+
+  const projectTotals = await getProjectTotals();
+  const projectsIncome = projectTotals.reduce((s, p) => s + p.income, 0);
+  const projectsExpense = projectTotals.reduce((s, p) => s + p.expense, 0);
+  const projectsBalance = projectsIncome + projectsExpense;
 
   return (
     <div className="space-y-5 sm:space-y-6 fade-up">
@@ -123,6 +129,101 @@ export default async function DashboardPage() {
           </div>
           <Wallet className="text-slate-400" />
         </div>
+      </div>
+
+      {/* Clubprojekte */}
+      <div className="card-soft overflow-hidden">
+        <div className="px-4 sm:px-5 py-4 border-b flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-semibold flex items-center gap-2">
+            <FolderKanban className="size-4 text-slate-500" />
+            Clubprojekte
+            <span className="text-xs font-normal text-slate-500">({projectTotals.length})</span>
+          </h3>
+          <Link href="/projects" className="text-sm text-blue-700 hover:underline whitespace-nowrap">
+            Alle Projekte verwalten →
+          </Link>
+        </div>
+        {projectTotals.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <FolderKanban className="size-8 mx-auto text-slate-300 mb-2" />
+            <div className="text-sm">Noch keine Clubprojekte angelegt.</div>
+            <Link href="/projects" className="btn-primary mt-3 inline-flex">
+              Erstes Projekt anlegen
+            </Link>
+          </div>
+        ) : (
+          <div className="table-stack sm:p-0 p-3">
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Projekt</th>
+                    <th className="text-right">Buchungen</th>
+                    <th className="text-right">Einnahmen</th>
+                    <th className="text-right">Ausgaben</th>
+                    <th className="text-right">Saldo</th>
+                    <th className="no-stack-label" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectTotals.map((p) => (
+                    <tr key={p.id}>
+                      <td data-label="Code">
+                        <span
+                          className="chip font-mono text-[11px]"
+                          style={{ background: `${p.color}1A`, color: p.color }}
+                        >
+                          {p.code}
+                        </span>
+                      </td>
+                      <td data-label="Projekt">
+                        <Link
+                          href={`/projects/${p.id}`}
+                          className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                        {p.isClosed && (
+                          <span className="ml-2 chip bg-slate-100 text-slate-600 text-[10px]">Abgeschlossen</span>
+                        )}
+                      </td>
+                      <td data-label="Buchungen" className="text-right tabular">{p.count}</td>
+                      <td data-label="Einnahmen" className="text-right font-mono tabular amount-pos">
+                        {formatEUR(p.income)}
+                      </td>
+                      <td data-label="Ausgaben" className="text-right font-mono tabular amount-neg">
+                        {formatEUR(p.expense)}
+                      </td>
+                      <td data-label="Saldo" className={`text-right font-mono tabular font-semibold ${p.balance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {formatEUR(p.balance)}
+                      </td>
+                      <td className="text-right no-stack-label">
+                        <Link
+                          href={`/projects/${p.id}`}
+                          className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1"
+                        >
+                          Abrechnung <ChevronRight className="size-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200">
+                    <td colSpan={3} className="font-semibold no-stack-label">Summe</td>
+                    <td className="text-right font-mono tabular amount-pos font-semibold">{formatEUR(projectsIncome)}</td>
+                    <td className="text-right font-mono tabular amount-neg font-semibold">{formatEUR(projectsExpense)}</td>
+                    <td className={`text-right font-mono tabular font-bold ${projectsBalance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                      {formatEUR(projectsBalance)}
+                    </td>
+                    <td className="no-stack-label" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Charts */}

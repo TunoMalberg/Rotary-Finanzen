@@ -18,6 +18,7 @@ import {
   Mail,
   Settings,
   Banknote,
+  FolderKanban,
   Menu,
   X,
 } from "lucide-react";
@@ -32,6 +33,7 @@ type NavItem = {
 const NAV: readonly NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Buchungen", icon: Receipt },
+  { href: "/projects", label: "Clubprojekte", icon: FolderKanban },
   { href: "/accounts", label: "Konten & Saldo-Prüfung", icon: Banknote },
   { href: "/import", label: "Bank-Import (George)", icon: Upload, treasurerOnly: true },
   { href: "/members", label: "Mitglieder", icon: Users },
@@ -89,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
         {items.map((n) => {
           const Icon = n.icon;
-          const active = pathname === n.href || pathname.startsWith(n.href + "/");
+          const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
           return (
             <Link
               key={n.href}
@@ -207,6 +209,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function currentPageLabel(pathname: string) {
-  const item = NAV.find((n) => pathname === n.href || pathname.startsWith(n.href + "/"));
+  const item = NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
   return item?.label ?? "";
 }

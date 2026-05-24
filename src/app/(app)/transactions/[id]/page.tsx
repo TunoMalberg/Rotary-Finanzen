@@ -29,6 +29,9 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
   const accounts = await prisma.account.findMany();
   const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
   const members = await prisma.member.findMany({ orderBy: { lastName: "asc" } });
+  const projects = await prisma.project.findMany({
+    orderBy: [{ isClosed: "asc" }, { sortOrder: "asc" }, { code: "asc" }],
+  });
 
   return (
     <div className="max-w-3xl fade-up">
@@ -38,6 +41,7 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
         accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
         categories={categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind }))}
         members={members.map((m) => ({ id: m.id, name: `${m.lastName}, ${m.firstName}` }))}
+        projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
         initial={{
           id: tx.id,
           clubYearId: tx.clubYearId,
@@ -49,6 +53,7 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
           amount: tx.amount,
           categoryId: tx.categoryId,
           memberId: tx.memberId,
+          projectId: tx.projectId,
           attachmentId: tx.attachmentId,
         }}
       />

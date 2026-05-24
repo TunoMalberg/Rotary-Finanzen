@@ -8,6 +8,7 @@ export function TxForm({
   accounts,
   categories,
   members,
+  projects,
   defaultClubYearId,
   defaultAccountId,
   initial,
@@ -16,6 +17,7 @@ export function TxForm({
   accounts: { id: string; name: string; type: string }[];
   categories: { id: string; name: string; kind: string }[];
   members: { id: string; name: string }[];
+  projects: { id: string; code: string; name: string }[];
   defaultClubYearId?: string;
   defaultAccountId?: string;
   initial?: {
@@ -29,6 +31,7 @@ export function TxForm({
     amount: number;
     categoryId?: string | null;
     memberId?: string | null;
+    projectId?: string | null;
     attachmentId?: string | null;
   };
 }) {
@@ -45,6 +48,7 @@ export function TxForm({
     amount: initial?.amount?.toString() ?? "",
     categoryId: initial?.categoryId ?? "",
     memberId: initial?.memberId ?? "",
+    projectId: initial?.projectId ?? "",
     attachmentId: initial?.attachmentId ?? "",
   });
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
@@ -144,6 +148,28 @@ export function TxForm({
             {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+          Clubprojekt (optional)
+        </label>
+        <select
+          className="input"
+          value={form.projectId}
+          onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+        >
+          <option value="">— kein Projekt —</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.code} · {p.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500 mt-1">
+          Wird die Buchung einem Projekt zugeordnet, taucht sie in dessen
+          Abrechnung (z. B. RYLA26) auf.
+        </p>
       </div>
 
       <div>

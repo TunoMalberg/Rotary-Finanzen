@@ -20,6 +20,7 @@ export async function POST(req: Request) {
       amount: Number(body.amount),
       categoryId: body.categoryId || null,
       memberId: body.memberId || null,
+      projectId: body.projectId || null,
       attachmentId: body.attachmentId || null,
       source: "MANUAL",
       createdById: session?.user?.id,

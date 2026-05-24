@@ -120,6 +120,8 @@ model Transaction {
   category      Category?   @relation(fields: [categoryId], references: [id])
   memberId      String?
   member        Member?     @relation(fields: [memberId], references: [id])
+  projectId     String?
+  project       Project?    @relation(fields: [projectId], references: [id])
   source        String      @default("MANUAL") // IMPORT | MANUAL | ARCHIVE
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
@@ -137,6 +139,25 @@ model Transaction {
   @@index([accountId, clubYearId, date])
   @@index([memberId])
   @@index([categoryId])
+  @@index([projectId])
+}
+
+/// Eigenständiges Clubprojekt (z. B. "RYLA 2026") mit eigener Abrechnung.
+/// Buchungen können einem Projekt zugeordnet werden; das Projekt zeigt
+/// Einnahmen, Ausgaben und Saldo unabhängig von Konto/Clubjahr.
+model Project {
+  id           String        @id @default(cuid())
+  code         String        @unique         // Kurzcode, z. B. "RYLA26"
+  name         String                         // Anzeigename, z. B. "RYLA 2026"
+  description  String?
+  color        String        @default("#7B2D8E")
+  startDate    DateTime?
+  endDate      DateTime?
+  isClosed     Boolean       @default(false)
+  sortOrder    Int           @default(0)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Invoice {

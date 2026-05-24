@@ -24,6 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.amount !== undefined) data.amount = Number(body.amount);
   if (body.categoryId !== undefined) data.categoryId = body.categoryId || null;
   if (body.memberId !== undefined) data.memberId = body.memberId || null;
+  if (body.projectId !== undefined) data.projectId = body.projectId || null;
   if (body.attachmentId !== undefined) data.attachmentId = body.attachmentId || null;
   const tx = await prisma.transaction.update({ where: { id }, data });
   return NextResponse.json(tx);
