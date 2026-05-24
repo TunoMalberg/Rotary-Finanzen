@@ -59,6 +59,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 | 2 | Mitgliederverwaltung + Excel-Import | [specs/members/document.md](members/document.md) | done |
 | 3 | Konten (Haupt + Global Grant) & Buchungen | [specs/transactions/document.md](transactions/document.md) | done |
 | 4 | George-/Erste-Bank-Import (CSV + XLSX, Cutoff + externalRef-Dedup) | [specs/import-george/document.md](import-george/document.md) | done |
+| 4b | SEPA-Sammeleinzug aufteilen (PDF) + Auto-Forderungsausgleich | [specs/import-sepa/document.md](import-sepa/document.md) | done |
 | 5 | Mitgliedsbeiträge, Forderungen & Mahnwesen | [specs/dues-dunning/document.md](dues-dunning/document.md) | done |
 | 6 | Auslagen-Verrechnung (Teilnahmelisten) | [specs/expenses-attendance/document.md](expenses-attendance/document.md) | done |
 | 7 | Budget & Liquiditätsplanung | [specs/budget-cashflow/document.md](budget-cashflow/document.md) | done |

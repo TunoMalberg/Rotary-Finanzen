@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         memberId: inv.memberId,
         amount: inv.amount,
         deletedAt: null,
-        invoicePaid: null,
+        invoicesPaid: { none: {} },
       },
     });
     if (tx) {

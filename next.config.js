@@ -5,6 +5,9 @@ const nextConfig = {
   distDir: process.env.NODE_ENV === 'production'
     ? (process.env.BUILD_DIR || '.next-build')
     : '.next',
+  // pdfjs-dist liest seinen Worker per dynamic import zur Laufzeit –
+  // nicht durch den Bundler ziehen, sondern aus node_modules laden lassen.
+  serverExternalPackages: ['pdfjs-dist'],
   // Enable CORS for Design Mode to load resources cross-origin (dev only)
   // Note: Do NOT set allowedDevOrigins - the default allows all origins in dev mode
   async headers() {

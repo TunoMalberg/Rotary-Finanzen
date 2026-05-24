@@ -75,6 +75,8 @@ model Member {
   invoices       Invoice[]
   transactions   Transaction[]
   attendanceEntries AttendanceEntry[]
+  allocations    TxAllocation[]
+  iban           String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -125,7 +127,8 @@ model Transaction {
   isReconciled  Boolean     @default(false)
   attachmentId  String?
   attachment    Attachment? @relation(fields: [attachmentId], references: [id])
-  invoicePaid   Invoice?    @relation("PaidByTx")
+  invoicesPaid  Invoice[]   @relation("PaidByTx")
+  allocations   TxAllocation[]
   createdById   String?
   createdAt     DateTime    @default(now())
   deletedAt     DateTime?
@@ -151,13 +154,39 @@ model Invoice {
   paymentMethod     String     // SEPA | EMAIL_INVOICE
   reminderLevel     Int        @default(0)
   lastReminderAt    DateTime?
-  paidTransactionId String?    @unique
+  paidTransactionId String?
   paidTransaction   Transaction? @relation("PaidByTx", fields: [paidTransactionId], references: [id])
   paidAt            DateTime?
   reminderLogs      ReminderLog[]
   attendanceEntry   AttendanceEntry?
+  allocations       TxAllocation[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+
+  @@index([paidTransactionId])
+}
+
+/// Buchungs-Aufteilung – z. B. SEPA-Sammeleinzug aufgeteilt auf einzelne
+/// Mitgliedsbeiträge / Forderungen. Eine Transaction kann viele Allocations
+/// haben; die Summe der Allocation-Beträge sollte = Transaction.amount sein.
+model TxAllocation {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  memberId      String?
+  member        Member?     @relation(fields: [memberId], references: [id])
+  invoiceId     String?
+  invoice       Invoice?    @relation(fields: [invoiceId], references: [id])
+  amount        Float
+  description   String?
+  partnerName   String?
+  partnerIban   String?
+  source        String      @default("SEPA_PDF") // SEPA_PDF | MANUAL
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([memberId])
+  @@index([invoiceId])
 }
 
 model ReminderLog {
