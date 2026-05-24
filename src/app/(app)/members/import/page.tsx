@@ -25,20 +25,20 @@ export default function MembersImportPage() {
 
   return (
     <div className="max-w-2xl fade-up">
-      <h1 className="text-2xl font-bold flex items-center gap-2 mb-1"><Upload className="size-6 text-blue-800" /> Mitglieder-Import</h1>
-      <p className="text-slate-500 text-sm mb-6">
+      <h1 className="font-bold flex items-center gap-2 mb-1"><Upload className="size-6 text-blue-800 shrink-0" /> Mitglieder-Import</h1>
+      <p className="text-slate-500 text-sm mb-4 sm:mb-6">
         Excel-Datei mit dem <code className="bg-slate-100 px-1 rounded">MB</code>-Sheet (Membership Report).
         Vorhandene Mitglieder werden anhand der Rotary-ID aktualisiert, neue werden angelegt.
       </p>
-      <form onSubmit={submit} className="card-soft p-6 space-y-4">
+      <form onSubmit={submit} className="card-soft p-3 sm:p-6 space-y-4">
         <input type="file" accept=".xlsx" className="input" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
-        {error && <div className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-3">{error}</div>}
+        {error && <div role="alert" className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-3">{error}</div>}
         {result && (
-          <div className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 flex items-center gap-2">
-            <CheckCircle2 className="size-4" /> Import abgeschlossen — neu: {result.created}, aktualisiert: {result.updated}, übersprungen: {result.skipped}.
+          <div role="status" className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 flex items-start gap-2">
+            <CheckCircle2 className="size-4 shrink-0 mt-0.5" /> <span>Import abgeschlossen — neu: {result.created}, aktualisiert: {result.updated}, übersprungen: {result.skipped}.</span>
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap btn-row">
           <button className="btn-primary" disabled={!file || busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} Importieren
           </button>

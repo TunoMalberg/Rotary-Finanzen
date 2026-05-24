@@ -84,8 +84,8 @@ export function TxForm({
   }
 
   return (
-    <form onSubmit={submit} className="card-soft p-6 space-y-4">
-      <div className="grid sm:grid-cols-2 gap-4">
+    <form onSubmit={submit} className="card-soft p-3 sm:p-6 space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">Datum</label>
           <input type="date" className="input" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
@@ -108,6 +108,7 @@ export function TxForm({
           <label className="text-xs font-semibold text-slate-700 mb-1 block">Betrag (EUR)</label>
           <input
             type="text"
+            inputMode="decimal"
             className="input font-mono"
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
@@ -128,7 +129,7 @@ export function TxForm({
         <input className="input" value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">Kategorie</label>
           <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
@@ -163,9 +164,9 @@ export function TxForm({
         )}
       </div>
 
-      {error && <div className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-3">{error}</div>}
+      {error && <div role="alert" className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-3">{error}</div>}
 
-      <div className="flex gap-2 pt-2">
+      <div className="flex gap-2 pt-2 flex-wrap btn-row">
         <button type="submit" className="btn-primary" disabled={saving}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           {initial?.id ? "Aktualisieren" : "Speichern"}

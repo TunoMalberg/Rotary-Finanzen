@@ -39,9 +39,9 @@ export function NewAttendanceForm({ clubYearId, clubYearLabel, members }: { club
 
   return (
     <form onSubmit={save} className="space-y-4">
-      <div className="card-soft p-5 space-y-3">
+      <div className="card-soft p-3 sm:p-5 space-y-3">
         <p className="text-xs text-slate-500">Clubjahr <strong>{clubYearLabel}</strong></p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold mb-1 block">Veranstaltung</label>
             <input className="input" required value={form.eventName} onChange={(e) => setForm({ ...form, eventName: e.target.value })} placeholder="z.B. Madrid-Reise, Heuriger" />
@@ -52,7 +52,7 @@ export function NewAttendanceForm({ clubYearId, clubYearLabel, members }: { club
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block">Beitrag pro Teilnehmer (EUR)</label>
-            <input className="input font-mono" required value={form.billPerHead} onChange={(e) => setForm({ ...form, billPerHead: e.target.value })} placeholder="z.B. 120" />
+            <input className="input font-mono" inputMode="decimal" required value={form.billPerHead} onChange={(e) => setForm({ ...form, billPerHead: e.target.value })} placeholder="z.B. 120" />
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block">Methode</label>
@@ -65,30 +65,31 @@ export function NewAttendanceForm({ clubYearId, clubYearLabel, members }: { club
         </div>
       </div>
 
-      <div className="card-soft p-5">
-        <div className="flex items-center justify-between mb-3">
+      <div className="card-soft p-3 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h3 className="font-semibold">Teilnehmer ({selected.length} ausgewählt)</h3>
           <div className="flex gap-2 text-sm">
-            <button type="button" className="btn-ghost text-xs" onClick={() => setSelected(members.map((m) => m.id))}>Alle</button>
-            <button type="button" className="btn-ghost text-xs" onClick={() => setSelected([])}>Keine</button>
+            <button type="button" className="btn-ghost text-xs px-3" style={{ minHeight: 36 }} onClick={() => setSelected(members.map((m) => m.id))}>Alle</button>
+            <button type="button" className="btn-ghost text-xs px-3" style={{ minHeight: 36 }} onClick={() => setSelected([])}>Keine</button>
           </div>
         </div>
-        <div className="grid sm:grid-cols-2 gap-1 max-h-96 overflow-auto pr-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-[60vh] sm:max-h-96 overflow-auto -mx-1 pr-1">
           {members.map((m) => (
-            <label key={m.id} className="flex items-center gap-2 text-sm py-1 px-2 hover:bg-slate-50 rounded cursor-pointer">
+            <label key={m.id} className="flex items-center gap-2 text-sm py-2 px-2 hover:bg-slate-50 rounded cursor-pointer min-h-[40px]">
               <input
                 type="checkbox"
+                className="size-5"
                 checked={selected.includes(m.id)}
                 onChange={(e) => setSelected(e.target.checked ? [...selected, m.id] : selected.filter((id) => id !== m.id))}
               />
-              <span>{m.name}</span>
-              {m.sepa && <span className="chip chip-sepa text-[10px] py-0">EZ</span>}
+              <span className="truncate">{m.name}</span>
+              {m.sepa && <span className="chip chip-sepa text-[10px] py-0 ml-auto shrink-0">EZ</span>}
             </label>
           ))}
         </div>
       </div>
 
-      <button className="btn-primary" disabled={saving || selected.length === 0}>
+      <button className="btn-primary w-full sm:w-auto" disabled={saving || selected.length === 0}>
         {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Liste anlegen ({selected.length} Teilnehmer)
       </button>
     </form>

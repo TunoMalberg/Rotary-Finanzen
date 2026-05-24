@@ -65,6 +65,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 | 8 | Eingangsrechnungs-Mails / Anhänge | [specs/inbox-attachments/document.md](inbox-attachments/document.md) | done |
 | 9 | Vergleichs-Charts | [specs/charts/document.md](charts/document.md) | done |
 | 10 | Archiv historischer Jahre | [specs/archive/document.md](archive/document.md) | done |
+| 11 | Responsive Design (Mobile-first, iPhone Pro Max …) | [specs/responsive/document.md](responsive/document.md) | done |
 
 ## Datenmodell (high-level)
 ```

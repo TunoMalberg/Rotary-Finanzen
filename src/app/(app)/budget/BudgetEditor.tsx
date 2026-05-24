@@ -45,27 +45,27 @@ export function BudgetEditor({ initial, clubYearId, canEdit, allYears }: { initi
   return (
     <div className="space-y-4">
       {canEdit && (
-        <div className="card-soft p-4 flex flex-wrap items-center gap-3">
-          <select className="input max-w-xs" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
+        <div className="card-soft p-3 sm:p-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
+          <select aria-label="Vorjahr" className="input sm:max-w-xs" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
             <option value="">Vorjahr wählen…</option>
             {allYears.filter((y) => y.id !== clubYearId).map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
           </select>
           <button onClick={copyPrior} disabled={!copyFrom || saving} className="btn-ghost">
             <Copy className="size-4" /> Aus Vorjahr kopieren
           </button>
-          <div className="flex-1" />
+          <div className="hidden sm:block sm:flex-1" />
           <button onClick={save} disabled={saving} className="btn-primary">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Budget speichern
           </button>
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
         <Section title="Einnahmen" rows={incomes} setBudget={setBudget} canEdit={canEdit} positive />
         <Section title="Ausgaben" rows={expenses} setBudget={setBudget} canEdit={canEdit} positive={false} />
       </div>
 
-      <div className="card-soft p-4 grid sm:grid-cols-3 gap-4 text-sm">
+      <div className="card-soft p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
         <Sum label="Einnahmen Soll vs Ist" budget={totalBudgetIn} actual={totalActualIn} />
         <Sum label="Ausgaben Soll vs Ist" budget={-totalBudgetOut} actual={totalActualOut} />
         <Sum label="Saldo Soll vs Ist" budget={totalBudgetIn - totalBudgetOut} actual={totalActualIn + totalActualOut} />
@@ -77,52 +77,56 @@ export function BudgetEditor({ initial, clubYearId, canEdit, allYears }: { initi
 function Section({ title, rows, setBudget, canEdit, positive }: { title: string; rows: Row[]; setBudget: (id: string, v: string) => void; canEdit: boolean; positive: boolean }) {
   return (
     <div className="card-soft overflow-hidden">
-      <div className="px-5 py-3 border-b font-semibold flex items-center justify-between">
+      <div className="px-4 sm:px-5 py-3 border-b font-semibold flex items-center justify-between">
         {title}
       </div>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Kategorie</th>
-            <th className="text-right">Budget</th>
-            <th className="text-right">Ist</th>
-            <th className="text-right">Δ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const actual = positive ? Math.max(0, r.actual) : Math.abs(Math.min(0, r.actual));
-            const delta = actual - r.budget;
-            const pct = r.budget > 0 ? (delta / r.budget) * 100 : 0;
-            const colorClass = positive ? (delta >= 0 ? "amount-pos" : "amount-neg") : (delta <= 0 ? "amount-pos" : "amount-neg");
-            return (
-              <tr key={r.categoryId}>
-                <td>
-                  <span className="chip" style={{ background: `${r.color}1A`, color: r.color }}>{r.categoryName}</span>
-                </td>
-                <td className="text-right">
-                  {canEdit ? (
-                    <input
-                      type="number"
-                      step="any"
-                      className="input text-right max-w-[140px] ml-auto font-mono"
-                      value={r.budget}
-                      onChange={(e) => setBudget(r.categoryId, e.target.value)}
-                    />
-                  ) : (
-                    <span className="font-mono tabular">{formatEUR(r.budget)}</span>
-                  )}
-                </td>
-                <td className="text-right font-mono tabular">{formatEUR(actual)}</td>
-                <td className={`text-right font-mono tabular ${colorClass}`}>
-                  {delta >= 0 ? "+" : ""}{formatEUR(delta)}
-                  {r.budget > 0 && <span className="text-xs ml-1 text-slate-400">({pct.toFixed(0)}%)</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Kategorie</th>
+              <th className="text-right">Budget</th>
+              <th className="text-right">Ist</th>
+              <th className="text-right">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const actual = positive ? Math.max(0, r.actual) : Math.abs(Math.min(0, r.actual));
+              const delta = actual - r.budget;
+              const pct = r.budget > 0 ? (delta / r.budget) * 100 : 0;
+              const colorClass = positive ? (delta >= 0 ? "amount-pos" : "amount-neg") : (delta <= 0 ? "amount-pos" : "amount-neg");
+              return (
+                <tr key={r.categoryId}>
+                  <td>
+                    <span className="chip" style={{ background: `${r.color}1A`, color: r.color }}>{r.categoryName}</span>
+                  </td>
+                  <td className="text-right">
+                    {canEdit ? (
+                      <input
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        aria-label={`Budget ${r.categoryName}`}
+                        className="input text-right max-w-[160px] ml-auto font-mono"
+                        value={r.budget}
+                        onChange={(e) => setBudget(r.categoryId, e.target.value)}
+                      />
+                    ) : (
+                      <span className="font-mono tabular">{formatEUR(r.budget)}</span>
+                    )}
+                  </td>
+                  <td className="text-right font-mono tabular whitespace-nowrap">{formatEUR(actual)}</td>
+                  <td className={`text-right font-mono tabular whitespace-nowrap ${colorClass}`}>
+                    {delta >= 0 ? "+" : ""}{formatEUR(delta)}
+                    {r.budget > 0 && <span className="text-xs ml-1 text-slate-400">({pct.toFixed(0)}%)</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

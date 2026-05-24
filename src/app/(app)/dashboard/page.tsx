@@ -39,16 +39,18 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="space-y-6 fade-up">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="text-xs font-semibold tracking-widest uppercase text-amber-600">
+    <div className="space-y-5 sm:space-y-6 fade-up">
+      <header className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <div className="text-[11px] sm:text-xs font-semibold tracking-widest uppercase text-amber-600">
             Clubjahr {cy.label}
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mt-1">Finanzielle Gebahrung</h1>
-          <p className="text-slate-500">Rotary Club Wien-Donau · {formatDate(cy.startsAt)} – {formatDate(cy.endsAt)}</p>
+          <h1 className="font-bold text-slate-900 mt-1">Finanzielle Gebahrung</h1>
+          <p className="text-slate-500 text-sm sm:text-base">
+            Rotary Club Wien-Donau · {formatDate(cy.startsAt)} – {formatDate(cy.endsAt)}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap btn-row w-full sm:w-auto">
           <Link href="/transactions/new" className="btn-primary">
             <Receipt className="size-4" /> Neue Buchung
           </Link>
@@ -57,7 +59,7 @@ export default async function DashboardPage() {
       </header>
 
       {/* KPI Cards */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
           title="Hauptkonto"
           value={formatEUR(balMain)}
@@ -91,7 +93,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Forderungs-Status */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="card-soft p-5 flex items-start justify-between">
           <div>
             <div className="text-sm text-slate-500">Offene Forderungen</div>
@@ -123,46 +125,50 @@ export default async function DashboardPage() {
 
       {/* Recent transactions */}
       <div className="card-soft overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-4 border-b flex items-center justify-between gap-3">
           <h3 className="font-semibold">Letzte Buchungen</h3>
-          <Link href="/transactions" className="text-sm text-blue-700 hover:underline">Alle anzeigen →</Link>
+          <Link href="/transactions" className="text-sm text-blue-700 hover:underline whitespace-nowrap">
+            Alle anzeigen →
+          </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Konto</th>
-                <th>Gegenpartei</th>
-                <th>Verwendungszweck</th>
-                <th>Kategorie</th>
-                <th className="text-right">Betrag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id}>
-                  <td>{formatDate(t.date)}</td>
-                  <td><span className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</span></td>
-                  <td className="font-medium">{t.counterparty ?? "—"}</td>
-                  <td className="text-slate-600">{t.purpose ?? "—"}</td>
-                  <td>
-                    {t.category ? (
-                      <span className="chip" style={{ background: `${t.category.color}1A`, color: t.category.color }}>
-                        {t.category.name}
-                      </span>
-                    ) : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
-                    {formatEUR(t.amount)}
-                  </td>
+        <div className="table-stack sm:p-0 p-3">
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Konto</th>
+                  <th>Gegenpartei</th>
+                  <th>Verwendungszweck</th>
+                  <th>Kategorie</th>
+                  <th className="text-right">Betrag</th>
                 </tr>
-              ))}
-              {recent.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-slate-500 py-10">Noch keine Buchungen.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recent.map((t) => (
+                  <tr key={t.id}>
+                    <td data-label="Datum" className="whitespace-nowrap">{formatDate(t.date)}</td>
+                    <td data-label="Konto"><span className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</span></td>
+                    <td data-label="Gegenpartei" className="font-medium">{t.counterparty ?? "—"}</td>
+                    <td data-label="Verwendungszweck" className="text-slate-600">{t.purpose ?? "—"}</td>
+                    <td data-label="Kategorie">
+                      {t.category ? (
+                        <span className="chip" style={{ background: `${t.category.color}1A`, color: t.category.color }}>
+                          {t.category.name}
+                        </span>
+                      ) : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
+                      {formatEUR(t.amount)}
+                    </td>
+                  </tr>
+                ))}
+                {recent.length === 0 && (
+                  <tr><td colSpan={6} className="text-center text-slate-500 py-10 no-stack-label">Noch keine Buchungen.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

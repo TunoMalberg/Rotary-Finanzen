@@ -51,14 +51,14 @@ export default async function DuesPage({ searchParams }: { searchParams: Promise
         {canEdit && <DuesActions clubYearId={cy.id} />}
       </header>
 
-      <div className="grid sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Stat label="Forderungen gesamt" value={formatEUR(total._sum.amount ?? 0)} accent="blue" />
         <Stat label="Offen" value={`${open._count} · ${formatEUR(open._sum.amount ?? 0)}`} accent="gold" />
         <Stat label="Bezahlt" value={`${paid._count} · ${formatEUR(paid._sum.amount ?? 0)}`} accent="green" />
         <Stat label="Überfällig" value={overdue.toString()} accent="red" />
       </div>
 
-      <form method="get" className="card-soft p-4 grid sm:grid-cols-4 gap-3 items-end">
+      <form method="get" className="card-soft p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
         <div>
           <label className="text-xs font-semibold mb-1 block">Clubjahr</label>
           <select name="year" defaultValue={cy.id} className="input">
@@ -86,48 +86,50 @@ export default async function DuesPage({ searchParams }: { searchParams: Promise
       </form>
 
       <div className="card-soft overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Mitglied</th>
-                <th>Methode</th>
-                <th>Referenz</th>
-                <th>Fällig</th>
-                <th>Status</th>
-                <th>Mahnstufe</th>
-                <th className="text-right">Betrag</th>
-                {canEdit && <th></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((i) => {
-                const overdue = (i.status === "OPEN" || i.status === "REMINDED") && i.dueDate < new Date();
-                return (
-                  <tr key={i.id} className={overdue ? "danger" : ""}>
-                    <td className="font-medium">
-                      <Link href={`/members/${i.memberId}`} className="hover:text-blue-700">{i.member.lastName}, {i.member.firstName}</Link>
-                      {i.member.email && <div className="text-xs text-slate-500">{i.member.email}</div>}
-                    </td>
-                    <td><span className={`chip ${i.paymentMethod === "SEPA" ? "chip-sepa" : "chip-invoice"}`}>{i.paymentMethod === "SEPA" ? "EZ" : "Rechnung"}</span></td>
-                    <td className="font-mono text-xs">{i.reference}</td>
-                    <td>{formatDate(i.dueDate)}{overdue && <AlertCircle className="size-3.5 inline text-rose-600 ml-1" />}</td>
-                    <td><span className={`chip chip-${i.status.toLowerCase()}`}>{statusDe(i.status)}</span></td>
-                    <td className="text-center">{i.reminderLevel > 0 ? <span className="font-mono">M{i.reminderLevel}</span> : "—"}</td>
-                    <td className="text-right tabular font-mono">{formatEUR(i.amount)}</td>
-                    {canEdit && (
-                      <td className="text-right">
-                        <DuesRowActions invoice={{ id: i.id, status: i.status, memberEmail: i.member.email, memberName: `${i.member.firstName} ${i.member.lastName}`, amount: i.amount, reference: i.reference, dueDate: i.dueDate.toISOString(), reminderLevel: i.reminderLevel, paymentMethod: i.paymentMethod }} />
+        <div className="table-stack sm:p-0 p-3">
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mitglied</th>
+                  <th>Methode</th>
+                  <th>Referenz</th>
+                  <th>Fällig</th>
+                  <th>Status</th>
+                  <th>Mahnstufe</th>
+                  <th className="text-right">Betrag</th>
+                  {canEdit && <th><span className="sr-only">Aktionen</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((i) => {
+                  const overdue = (i.status === "OPEN" || i.status === "REMINDED") && i.dueDate < new Date();
+                  return (
+                    <tr key={i.id} className={overdue ? "danger" : ""}>
+                      <td data-label="Mitglied" className="font-medium">
+                        <Link href={`/members/${i.memberId}`} className="hover:text-blue-700">{i.member.lastName}, {i.member.firstName}</Link>
+                        {i.member.email && <div className="text-xs text-slate-500 break-all">{i.member.email}</div>}
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {invoices.length === 0 && (
-                <tr><td colSpan={canEdit ? 8 : 7} className="text-center text-slate-500 py-12">Keine Forderungen für diese Auswahl.</td></tr>
-              )}
-            </tbody>
-          </table>
+                      <td data-label="Methode"><span className={`chip ${i.paymentMethod === "SEPA" ? "chip-sepa" : "chip-invoice"}`}>{i.paymentMethod === "SEPA" ? "EZ" : "Rechnung"}</span></td>
+                      <td data-label="Referenz" className="font-mono text-xs break-all">{i.reference}</td>
+                      <td data-label="Fällig" className="whitespace-nowrap">{formatDate(i.dueDate)}{overdue && <AlertCircle className="size-3.5 inline text-rose-600 ml-1" />}</td>
+                      <td data-label="Status"><span className={`chip chip-${i.status.toLowerCase()}`}>{statusDe(i.status)}</span></td>
+                      <td data-label="Mahnstufe" className="text-center">{i.reminderLevel > 0 ? <span className="font-mono">M{i.reminderLevel}</span> : "—"}</td>
+                      <td data-label="Betrag" className="text-right tabular font-mono">{formatEUR(i.amount)}</td>
+                      {canEdit && (
+                        <td data-label="Aktionen" className="text-right">
+                          <DuesRowActions invoice={{ id: i.id, status: i.status, memberEmail: i.member.email, memberName: `${i.member.firstName} ${i.member.lastName}`, amount: i.amount, reference: i.reference, dueDate: i.dueDate.toISOString(), reminderLevel: i.reminderLevel, paymentMethod: i.paymentMethod }} />
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {invoices.length === 0 && (
+                  <tr><td colSpan={canEdit ? 8 : 7} className="text-center text-slate-500 py-12 no-stack-label">Keine Forderungen für diese Auswahl.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

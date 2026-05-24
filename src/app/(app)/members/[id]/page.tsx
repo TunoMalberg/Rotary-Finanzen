@@ -29,8 +29,8 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         <p className="text-slate-500 text-sm">Rotary-ID {m.rotaryMemberId ?? "—"} · seit {m.joinedAt ? formatDate(m.joinedAt) : "—"}</p>
       </header>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="card-soft p-5 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        <div className="card-soft p-3 sm:p-5 space-y-3">
           <h3 className="font-semibold border-b pb-2">Stammdaten</h3>
           {canEdit ? (
             <MemberEditForm member={{
@@ -54,43 +54,49 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           )}
         </div>
 
-        <div className="card-soft p-5 space-y-3">
+        <div className="card-soft p-3 sm:p-5 space-y-3">
           <h3 className="font-semibold border-b pb-2">Forderungen</h3>
-          <table className="data-table text-sm">
-            <thead><tr><th>Clubjahr</th><th>Referenz</th><th>Methode</th><th>Status</th><th className="text-right">Betrag</th></tr></thead>
-            <tbody>
-              {m.invoices.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.clubYear.label}</td>
-                  <td className="font-mono text-xs">{i.reference}</td>
-                  <td><span className={`chip ${i.paymentMethod === "SEPA" ? "chip-sepa" : "chip-invoice"}`}>{i.paymentMethod === "SEPA" ? "EZ" : "Rg."}</span></td>
-                  <td><span className={`chip chip-${i.status.toLowerCase()}`}>{statusDe(i.status)}</span></td>
-                  <td className="text-right tabular">{formatEUR(i.amount)}</td>
-                </tr>
-              ))}
-              {m.invoices.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-4">Keine Forderungen.</td></tr>}
-            </tbody>
-          </table>
+          <div className="table-scroll -mx-3 sm:mx-0 px-3 sm:px-0">
+            <table className="data-table text-sm">
+              <thead><tr><th>Clubjahr</th><th>Referenz</th><th>Methode</th><th>Status</th><th className="text-right">Betrag</th></tr></thead>
+              <tbody>
+                {m.invoices.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.clubYear.label}</td>
+                    <td className="font-mono text-xs break-all">{i.reference}</td>
+                    <td><span className={`chip ${i.paymentMethod === "SEPA" ? "chip-sepa" : "chip-invoice"}`}>{i.paymentMethod === "SEPA" ? "EZ" : "Rg."}</span></td>
+                    <td><span className={`chip chip-${i.status.toLowerCase()}`}>{statusDe(i.status)}</span></td>
+                    <td className="text-right tabular whitespace-nowrap">{formatEUR(i.amount)}</td>
+                  </tr>
+                ))}
+                {m.invoices.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-4">Keine Forderungen.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <div className="card-soft overflow-hidden">
-        <div className="px-5 py-4 border-b font-semibold">Buchungen mit diesem Mitglied</div>
-        <table className="data-table">
-          <thead><tr><th>Datum</th><th>Konto</th><th>Verwendungszweck</th><th>Kategorie</th><th className="text-right">Betrag</th></tr></thead>
-          <tbody>
-            {m.transactions.map((t) => (
-              <tr key={t.id}>
-                <td>{formatDate(t.date)}</td>
-                <td className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</td>
-                <td>{t.purpose ?? t.counterparty}</td>
-                <td>{t.category?.name ?? "—"}</td>
-                <td className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>{formatEUR(t.amount)}</td>
-              </tr>
-            ))}
-            {m.transactions.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-6">Keine Buchungen verknüpft.</td></tr>}
-          </tbody>
-        </table>
+        <div className="px-4 sm:px-5 py-4 border-b font-semibold">Buchungen mit diesem Mitglied</div>
+        <div className="table-stack sm:p-0 p-3">
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Datum</th><th>Konto</th><th>Verwendungszweck</th><th>Kategorie</th><th className="text-right">Betrag</th></tr></thead>
+              <tbody>
+                {m.transactions.map((t) => (
+                  <tr key={t.id}>
+                    <td data-label="Datum" className="whitespace-nowrap">{formatDate(t.date)}</td>
+                    <td data-label="Konto" className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</td>
+                    <td data-label="Zweck">{t.purpose ?? t.counterparty}</td>
+                    <td data-label="Kategorie">{t.category?.name ?? "—"}</td>
+                    <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>{formatEUR(t.amount)}</td>
+                  </tr>
+                ))}
+                {m.transactions.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-6 no-stack-label">Keine Buchungen verknüpft.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div>

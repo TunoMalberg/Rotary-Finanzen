@@ -55,13 +55,13 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   return (
     <div className="space-y-5 fade-up">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="size-6 text-blue-800" /> Buchungen
+        <div className="min-w-0">
+          <h1 className="font-bold flex items-center gap-2">
+            <Receipt className="size-6 text-blue-800 shrink-0" /> Buchungen
           </h1>
           <p className="text-slate-500 text-sm">Clubjahr {cy.label} · {txs.length} Buchungen geladen</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 btn-row w-full sm:w-auto">
           {isTreasurer && (
             <Link href="/transactions/new" className="btn-primary">
               <Plus className="size-4" /> Neue Buchung
@@ -71,7 +71,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       </header>
 
       {/* Filters */}
-      <form method="get" className="card-soft p-4 grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+      <form method="get" className="card-soft p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
         <div>
           <label className="text-xs font-semibold text-slate-600 mb-1 block">Clubjahr</label>
           <select name="year" defaultValue={cy.id} className="input">
@@ -97,14 +97,16 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <label className="text-xs font-semibold text-slate-600 mb-1 block">Suche</label>
           <input type="text" name="q" defaultValue={params.q ?? ""} className="input" placeholder="Gegenpartei, Verwendungszweck …" />
         </div>
-        <div className="flex gap-2 lg:col-span-5">
-          <button type="submit" className="btn-primary">Filter anwenden</button>
-          <Link href="/transactions" className="btn-ghost">Zurücksetzen</Link>
-          <div className="flex-1" />
-          <div className="text-right text-sm">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 sm:col-span-2 lg:col-span-5">
+          <div className="flex gap-2 flex-wrap btn-row">
+            <button type="submit" className="btn-primary">Filter anwenden</button>
+            <Link href="/transactions" className="btn-ghost">Zurücksetzen</Link>
+          </div>
+          <div className="sm:flex-1" />
+          <div className="text-left sm:text-right text-sm grid grid-cols-2 sm:flex sm:flex-col gap-x-3 gap-y-0.5">
             <div>Einnahmen: <span className="amount-pos font-semibold">{formatEUR(totalIn)}</span></div>
             <div>Ausgaben: <span className="amount-neg font-semibold">{formatEUR(totalOut)}</span></div>
-            <div>Saldo Auswahl: <span className="font-bold">{formatEUR(totalIn + totalOut)}</span></div>
+            <div className="col-span-2">Saldo: <span className="font-bold">{formatEUR(totalIn + totalOut)}</span></div>
           </div>
         </div>
       </form>
