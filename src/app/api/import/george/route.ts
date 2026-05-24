@@ -144,8 +144,17 @@ export async function POST(req: Request) {
     let dup = null as { id: string } | null;
     let upgradeTarget: { id: string; counterparty: string | null; purpose: string | null; externalRef: string | null } | null = null;
     if (externalRef) {
+      // Wichtig: nur als Duplikat werten, wenn auch Betrag + Zweck identisch sind.
+      // George/Erste vergibt mehreren Quartals-Spesen am 31.3./30.6./30.9./31.12.
+      // dieselbe Bank-Buchungsreferenz – das sind aber VERSCHIEDENE Buchungen.
       dup = await prisma.transaction.findFirst({
-        where: { accountId, externalRef, deletedAt: null },
+        where: {
+          accountId,
+          externalRef,
+          amount: r.amount,
+          purpose,
+          deletedAt: null,
+        },
         select: { id: true },
       });
     }

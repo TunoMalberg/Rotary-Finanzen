@@ -135,7 +135,10 @@ model Transaction {
   createdAt     DateTime    @default(now())
   deletedAt     DateTime?
 
-  @@unique([accountId, externalRef])
+  // George/Erste vergibt mehreren zusammengehörigen Buchungen am
+  // gleichen Tag (z. B. Quartalsspesen) dieselbe Buchungsreferenz, daher
+  // muss die Eindeutigkeit Betrag + Zweck mit einbeziehen.
+  @@unique([accountId, externalRef, amount, purpose])
   @@index([accountId, clubYearId, date])
   @@index([memberId])
   @@index([categoryId])

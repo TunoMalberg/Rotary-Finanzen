@@ -2,10 +2,13 @@ import { auditAccountBalances } from "@/lib/balanceAudit";
 import { formatDate, formatEUR } from "@/lib/format";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
-import { Wallet, AlertTriangle, CheckCircle2, ArrowRight, Settings2 } from "lucide-react";
+import { Wallet, AlertTriangle, CheckCircle2, ArrowRight, Settings2, ScanSearch } from "lucide-react";
 import Link from "next/link";
 import { OpeningBalanceEditor } from "./OpeningBalanceEditor";
 import { DuplicateResolver } from "./DuplicateResolver";
+import { ReconcileTool } from "./ReconcileTool";
+import { prisma } from "@/lib/prisma";
+import { getCurrentClubYear } from "@/lib/dataAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,10 @@ export default async function AccountsPage() {
   const session = await getServerSession(authOptions);
   const canEdit = isTreasurer(session?.user?.role);
   const { rows, duplicates, duplicateCount, duplicateSum } = await auditAccountBalances();
+
+  const accounts = await prisma.account.findMany({ orderBy: { type: "asc" } });
+  const clubYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
+  const currentCY = await getCurrentClubYear();
 
   // Pivot: pro Jahr eine Zeile, beide Konten nebeneinander
   const byYear = new Map<string, typeof rows>();
@@ -237,6 +244,39 @@ export default async function AccountsPage() {
           </div>
         )}
       </section>
+
+      {/* Bank-Abgleich Tool */}
+      {canEdit && (
+        <section className="card-soft overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 border-b">
+            <h2 className="font-semibold flex items-center gap-2">
+              <ScanSearch className="size-4 text-blue-700" />
+              Bank-Abgleich (Vollvergleich)
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Trage zuerst den Bank-Endsaldo aus George ein, um sofort die
+              Differenz zur Datenbank zu sehen. Für eine zeilengenaue Analyse
+              kannst du danach die George-CSV/XLSX hochladen — die App listet
+              jede fehlende oder überzählige Buchung auf den Cent.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            <ReconcileTool
+              accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type, iban: a.iban }))}
+              clubYears={clubYears.map((y) => ({ id: y.id, label: y.label }))}
+              defaultAccountId={accounts.find((a) => a.type === "MAIN")?.id ?? accounts[0]?.id}
+              defaultClubYearId={currentCY.id}
+              closingByYearAccount={Object.fromEntries(
+                rows.map((r) => [
+                  `${r.yearId}|${r.accountType === "MAIN" ? "MAIN" : "GG"}`,
+                  r.computedClosing,
+                ]),
+              )}
+              accountTypeById={Object.fromEntries(accounts.map((a) => [a.id, a.type]))}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Hilfe-Hinweis */}
       <section className="card-soft p-4 sm:p-5 bg-blue-50/50 border border-blue-100">
