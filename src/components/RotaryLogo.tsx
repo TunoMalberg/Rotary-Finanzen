@@ -1,3 +1,29 @@
+// Pre-compute spoke and tooth coordinates with fixed precision so that the
+// server-rendered HTML matches the client-rendered HTML byte-for-byte (avoids
+// React hydration mismatches caused by floating-point serialization differences
+// between Node and the browser).
+const round = (n: number) => Math.round(n * 1000) / 1000;
+
+const SPOKES = Array.from({ length: 6 }).map((_, i) => {
+  const angle = (i * 60 * Math.PI) / 180;
+  return {
+    x1: round(32 + Math.cos(angle) * 9),
+    y1: round(32 + Math.sin(angle) * 9),
+    x2: round(32 + Math.cos(angle) * 30),
+    y2: round(32 + Math.sin(angle) * 30),
+  };
+});
+
+const TEETH = Array.from({ length: 24 }).map((_, i) => {
+  const angle = (i * 15 * Math.PI) / 180;
+  return {
+    x1: round(32 + Math.cos(angle) * 30),
+    y1: round(32 + Math.sin(angle) * 30),
+    x2: round(32 + Math.cos(angle) * 33),
+    y2: round(32 + Math.sin(angle) * 33),
+  };
+});
+
 export function RotaryLogo({ size = 28 }: { size?: number }) {
   return (
     <svg
@@ -18,23 +44,31 @@ export function RotaryLogo({ size = 28 }: { size?: number }) {
       <circle cx="32" cy="32" r="9" fill="#fff" stroke="#1a1a1a" strokeWidth="1.4" />
       <circle cx="32" cy="32" r="3" fill="none" stroke="#1a1a1a" strokeWidth="1.6" />
       {/* spokes */}
-      {Array.from({ length: 6 }).map((_, i) => {
-        const angle = (i * 60 * Math.PI) / 180;
-        const x1 = 32 + Math.cos(angle) * 9;
-        const y1 = 32 + Math.sin(angle) * 9;
-        const x2 = 32 + Math.cos(angle) * 30;
-        const y2 = 32 + Math.sin(angle) * 30;
-        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />;
-      })}
+      {SPOKES.map((s, i) => (
+        <line
+          key={i}
+          x1={s.x1}
+          y1={s.y1}
+          x2={s.x2}
+          y2={s.y2}
+          stroke="#1a1a1a"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ))}
       {/* gear teeth */}
-      {Array.from({ length: 24 }).map((_, i) => {
-        const angle = (i * 15 * Math.PI) / 180;
-        const x1 = 32 + Math.cos(angle) * 30;
-        const y1 = 32 + Math.sin(angle) * 30;
-        const x2 = 32 + Math.cos(angle) * 33;
-        const y2 = 32 + Math.sin(angle) * 33;
-        return <line key={`t-${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />;
-      })}
+      {TEETH.map((t, i) => (
+        <line
+          key={`t-${i}`}
+          x1={t.x1}
+          y1={t.y1}
+          x2={t.x2}
+          y2={t.y2}
+          stroke="#1a1a1a"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      ))}
     </svg>
   );
 }
