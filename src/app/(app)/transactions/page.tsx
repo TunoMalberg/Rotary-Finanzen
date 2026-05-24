@@ -1,0 +1,133 @@
+import { prisma } from "@/lib/prisma";
+import { getCurrentClubYear } from "@/lib/dataAccess";
+import { formatDate, formatEUR } from "@/lib/format";
+import { TransactionsTable } from "./TransactionsTable";
+import Link from "next/link";
+import { Receipt, Plus } from "lucide-react";
+import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+
+export const dynamic = "force-dynamic";
+
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ account?: string; q?: string; year?: string; cat?: string }> }) {
+  const params = await searchParams;
+  const session = await getServerSession(authOptions);
+  const isTreasurer = session?.user?.role === "treasurer" || session?.user?.role === "admin";
+  const cy = params.year
+    ? (await prisma.clubYear.findUnique({ where: { id: params.year } })) ?? (await getCurrentClubYear())
+    : await getCurrentClubYear();
+  const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
+  const accounts = await prisma.account.findMany();
+  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
+  const accountFilter =
+    params.account === "main" ? accounts.find((a) => a.type === "MAIN")
+    : params.account === "gg" ? accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST")
+    : null;
+
+  const where: {
+    clubYearId: string;
+    deletedAt: null;
+    accountId?: string;
+    categoryId?: string;
+    OR?: Array<{ counterparty?: { contains: string }; purpose?: { contains: string }; note?: { contains: string } }>;
+  } = {
+    clubYearId: cy.id,
+    deletedAt: null,
+  };
+  if (accountFilter) where.accountId = accountFilter.id;
+  if (params.cat && params.cat !== "all") where.categoryId = params.cat;
+  if (params.q) where.OR = [
+    { counterparty: { contains: params.q } },
+    { purpose: { contains: params.q } },
+    { note: { contains: params.q } },
+  ];
+
+  const txs = await prisma.transaction.findMany({
+    where,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: { category: true, account: true, member: true, attachment: true },
+    take: 500,
+  });
+
+  const totalIn = txs.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const totalOut = txs.filter((t) => t.amount < 0).reduce((s, t) => s + t.amount, 0);
+
+  return (
+    <div className="space-y-5 fade-up">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Receipt className="size-6 text-blue-800" /> Buchungen
+          </h1>
+          <p className="text-slate-500 text-sm">Clubjahr {cy.label} · {txs.length} Buchungen geladen</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isTreasurer && (
+            <Link href="/transactions/new" className="btn-primary">
+              <Plus className="size-4" /> Neue Buchung
+            </Link>
+          )}
+        </div>
+      </header>
+
+      {/* Filters */}
+      <form method="get" className="card-soft p-4 grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <div>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Clubjahr</label>
+          <select name="year" defaultValue={cy.id} className="input">
+            {allYears.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Konto</label>
+          <select name="account" defaultValue={params.account ?? ""} className="input">
+            <option value="">Alle</option>
+            <option value="main">Hauptkonto</option>
+            <option value="gg">Global Grant Treuhand</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Kategorie</label>
+          <select name="cat" defaultValue={params.cat ?? "all"} className="input">
+            <option value="all">Alle</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Suche</label>
+          <input type="text" name="q" defaultValue={params.q ?? ""} className="input" placeholder="Gegenpartei, Verwendungszweck …" />
+        </div>
+        <div className="flex gap-2 lg:col-span-5">
+          <button type="submit" className="btn-primary">Filter anwenden</button>
+          <Link href="/transactions" className="btn-ghost">Zurücksetzen</Link>
+          <div className="flex-1" />
+          <div className="text-right text-sm">
+            <div>Einnahmen: <span className="amount-pos font-semibold">{formatEUR(totalIn)}</span></div>
+            <div>Ausgaben: <span className="amount-neg font-semibold">{formatEUR(totalOut)}</span></div>
+            <div>Saldo Auswahl: <span className="font-bold">{formatEUR(totalIn + totalOut)}</span></div>
+          </div>
+        </div>
+      </form>
+
+      {/* Table */}
+      <TransactionsTable
+        transactions={txs.map((t) => ({
+          id: t.id,
+          date: t.date.toISOString(),
+          accountType: t.account.type,
+          accountName: t.account.name,
+          counterparty: t.counterparty,
+          purpose: t.purpose,
+          code: t.code,
+          amount: t.amount,
+          source: t.source,
+          category: t.category ? { id: t.category.id, name: t.category.name, color: t.category.color } : null,
+          memberName: t.member ? `${t.member.lastName}, ${t.member.firstName}` : null,
+          attachmentName: t.attachment?.fileName ?? null,
+          attachmentId: t.attachment?.id ?? null,
+        }))}
+        canEdit={isTreasurer}
+      />
+    </div>
+  );
+}

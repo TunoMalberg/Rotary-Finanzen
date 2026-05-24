@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         String   @default("president") // 'treasurer' | 'president' | 'admin'
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  name         String
+  iban         String?
+  type         String   // 'MAIN' | 'GLOBAL_GRANT_TRUST'
+  transactions Transaction[]
+  createdAt    DateTime @default(now())
+}
+
+model ClubYear {
+  id                  String   @id @default(cuid())
+  label               String   @unique // '2025/2026'
+  startsAt            DateTime
+  endsAt              DateTime
+  isClosed            Boolean  @default(false)
+  openingBalanceMain  Float    @default(0)
+  openingBalanceGG    Float    @default(0)
+  transactions Transaction[]
+  budgetLines  BudgetLine[]
+  cashflows    CashflowEntry[]
+  invoices     Invoice[]
+  attendanceLists AttendanceList[]
+  archivedYear ArchivedYear?
+  createdAt    DateTime @default(now())
+}
+
+model Category {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  kind            String   // INCOME | EXPENSE | NEUTRAL
+  color           String   @default("#17458F")
+  isDuesCategory  Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  transactions    Transaction[]
+  budgetLines     BudgetLine[]
+}
+
+model Member {
+  id             String   @id @default(cuid())
+  rotaryMemberId Int?     @unique
+  lastName       String
+  firstName      String
+  salutation     String?
+  address        String?
+  city           String?
+  postalCode     String?
+  country        String?
+  email          String?
+  phone          String?
+  paysBySEPA     Boolean  @default(false)
+  isExempt       Boolean  @default(false)
+  duesAmount     Float    @default(580)
+  status         String   @default("ACTIVE") // ACTIVE | INACTIVE | EXEMPT
+  joinedAt       DateTime?
+  leftAt         DateTime?
+  notes          String?
+  invoices       Invoice[]
+  transactions   Transaction[]
+  attendanceEntries AttendanceEntry[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ImportBatch {
+  id           String   @id @default(cuid())
+  accountId    String
+  fileName     String
+  importedById String?
+  rowCount     Int
+  createdAt    DateTime @default(now())
+  transactions Transaction[]
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  kind         String   @default("OTHER") // INVOICE | RECEIPT | EMAIL | OTHER
+  uploadedById String?
+  uploadedAt   DateTime @default(now())
+  transactions Transaction[]
+}
+
+model Transaction {
+  id            String      @id @default(cuid())
+  accountId     String
+  account       Account     @relation(fields: [accountId], references: [id])
+  clubYearId    String
+  clubYear      ClubYear    @relation(fields: [clubYearId], references: [id])
+  date          DateTime
+  valueDate     DateTime?
+  counterparty  String?
+  purpose       String?
+  code          String?
+  note          String?
+  amount        Float       // positive = income, negative = expense
+  categoryId    String?
+  category      Category?   @relation(fields: [categoryId], references: [id])
+  memberId      String?
+  member        Member?     @relation(fields: [memberId], references: [id])
+  source        String      @default("MANUAL") // IMPORT | MANUAL | ARCHIVE
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+  isReconciled  Boolean     @default(false)
+  attachmentId  String?
+  attachment    Attachment? @relation(fields: [attachmentId], references: [id])
+  invoicePaid   Invoice?    @relation("PaidByTx")
+  createdById   String?
+  createdAt     DateTime    @default(now())
+  deletedAt     DateTime?
+
+  @@index([accountId, clubYearId, date])
+  @@index([memberId])
+  @@index([categoryId])
+}
+
+model Invoice {
+  id                String     @id @default(cuid())
+  type              String     // DUES | EXPENSE
+  memberId          String
+  member            Member     @relation(fields: [memberId], references: [id])
+  clubYearId        String
+  clubYear          ClubYear   @relation(fields: [clubYearId], references: [id])
+  dueDate           DateTime
+  amount            Float
+  status            String     @default("OPEN") // OPEN | PAID | REMINDED | CANCELLED
+  reference         String     @unique
+  description       String?
+  paymentMethod     String     // SEPA | EMAIL_INVOICE
+  reminderLevel     Int        @default(0)
+  lastReminderAt    DateTime?
+  paidTransactionId String?    @unique
+  paidTransaction   Transaction? @relation("PaidByTx", fields: [paidTransactionId], references: [id])
+  paidAt            DateTime?
+  reminderLogs      ReminderLog[]
+  attendanceEntry   AttendanceEntry?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model ReminderLog {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  sentAt    DateTime @default(now())
+  level     Int
+  channel   String   @default("EMAIL")
+  notes     String?
+}
+
+model BudgetLine {
+  id         String   @id @default(cuid())
+  clubYearId String
+  clubYear   ClubYear @relation(fields: [clubYearId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  amount     Float
+  note       String?
+
+  @@unique([clubYearId, categoryId])
+}
+
+model CashflowEntry {
+  id          String   @id @default(cuid())
+  clubYearId  String
+  clubYear    ClubYear @relation(fields: [clubYearId], references: [id])
+  date        DateTime
+  label       String
+  amount      Float
+  isPlanned   Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+}
+
+model AttendanceList {
+  id            String   @id @default(cuid())
+  eventName     String
+  eventDate     DateTime
+  totalCost     Float?
+  billPerHead   Float
+  paymentMethod String   // SEPA | EMAIL_INVOICE | MIXED
+  clubYearId    String
+  clubYear      ClubYear @relation(fields: [clubYearId], references: [id])
+  entries       AttendanceEntry[]
+  createdAt     DateTime @default(now())
+}
+
+model AttendanceEntry {
+  id        String   @id @default(cuid())
+  listId    String
+  list      AttendanceList @relation(fields: [listId], references: [id])
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id])
+  amount    Float
+  invoiceId String?  @unique
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+}
+
+model ArchivedYear {
+  id           String   @id @default(cuid())
+  clubYearId   String   @unique
+  clubYear     ClubYear @relation(fields: [clubYearId], references: [id])
+  closedAt     DateTime @default(now())
+  closedById   String?
+  summaryJson  String   // JSON string
+  fileName     String?
+}
