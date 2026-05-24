@@ -133,7 +133,16 @@ export async function POST(req: Request) {
     }
 
     // Duplikat-Erkennung
+    //   1. exakter externalRef-Treffer (Bank-Buchungsreferenz)
+    //   2. Fallback A: Date + Amount + Purpose (alte Logik, exakter Match)
+    //   3. Fallback B: Date + Amount – wenn die vorhandene Buchung KEINE
+    //      externalRef hat (z. B. manuell oder per Seed angelegt) und der
+    //      neue Datensatz eine externalRef bringt → fast sicher dieselbe
+    //      Buchung. In diesem Fall *upgraden* wir die vorhandene Buchung
+    //      (externalRef + counterparty + ggf. fehlende Infos nachpflegen)
+    //      statt ein Duplikat zu erzeugen.
     let dup = null as { id: string } | null;
+    let upgradeTarget: { id: string; counterparty: string | null; purpose: string | null; externalRef: string | null } | null = null;
     if (externalRef) {
       dup = await prisma.transaction.findFirst({
         where: { accountId, externalRef, deletedAt: null },
@@ -141,7 +150,7 @@ export async function POST(req: Request) {
       });
     }
     if (!dup) {
-      // Fallback: date + amount + purpose
+      // Fallback A: date + amount + purpose
       dup = await prisma.transaction.findFirst({
         where: {
           accountId,
@@ -153,7 +162,36 @@ export async function POST(req: Request) {
         select: { id: true },
       });
     }
+    if (!dup && externalRef) {
+      // Fallback B: gleicher Tag + gleicher Betrag, vorhandene Zeile ohne externalRef
+      const candidate = await prisma.transaction.findFirst({
+        where: {
+          accountId,
+          date: r.date,
+          amount: r.amount,
+          externalRef: null,
+          deletedAt: null,
+        },
+        select: { id: true, counterparty: true, purpose: true, externalRef: true },
+      });
+      if (candidate) {
+        dup = { id: candidate.id };
+        upgradeTarget = candidate;
+      }
+    }
     if (dup) {
+      // Upgrade-Fall: existierende Buchung um Bank-Metadaten ergänzen
+      if (!dryRun && upgradeTarget && externalRef) {
+        await prisma.transaction.update({
+          where: { id: upgradeTarget.id },
+          data: {
+            externalRef,
+            counterparty: upgradeTarget.counterparty || counterparty,
+            purpose: upgradeTarget.purpose || purpose,
+            valueDate: r.valueDate ?? undefined,
+          },
+        });
+      }
       duplicates++;
       preview.push({
         date: r.date.toISOString(),

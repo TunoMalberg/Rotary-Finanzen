@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getAccountBalance, getCategoryTotals, getCurrentClubYear } from "@/lib/dataAccess";
+import { computeRunningBalances } from "@/lib/runningBalance";
 import { formatEUR, formatDate } from "@/lib/format";
 import Link from "next/link";
 import { ArrowUpRight, ArrowDownRight, Wallet, Mail, AlertTriangle, Receipt } from "lucide-react";
@@ -33,9 +34,13 @@ export default async function DashboardPage() {
 
   const recent = await prisma.transaction.findMany({
     where: { clubYearId: cy.id, deletedAt: null },
-    orderBy: { date: "desc" },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     take: 8,
     include: { category: true, account: true, member: true },
+  });
+  const recentBalanceMap = await computeRunningBalances({
+    accountIds: [...new Set(recent.map((t) => t.accountId))],
+    clubYearIds: [cy.id],
   });
 
   return (
@@ -142,29 +147,36 @@ export default async function DashboardPage() {
                   <th>Verwendungszweck</th>
                   <th>Kategorie</th>
                   <th className="text-right">Betrag</th>
+                  <th className="text-right whitespace-nowrap" title="Kontosaldo nach dieser Buchung">Saldo</th>
                 </tr>
               </thead>
               <tbody>
-                {recent.map((t) => (
-                  <tr key={t.id}>
-                    <td data-label="Datum" className="whitespace-nowrap">{formatDate(t.date)}</td>
-                    <td data-label="Konto"><span className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</span></td>
-                    <td data-label="Gegenpartei" className="font-medium">{t.counterparty ?? "—"}</td>
-                    <td data-label="Verwendungszweck" className="text-slate-600">{t.purpose ?? "—"}</td>
-                    <td data-label="Kategorie">
-                      {t.category ? (
-                        <span className="chip" style={{ background: `${t.category.color}1A`, color: t.category.color }}>
-                          {t.category.name}
-                        </span>
-                      ) : <span className="text-slate-400">—</span>}
-                    </td>
-                    <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
-                      {formatEUR(t.amount)}
-                    </td>
-                  </tr>
-                ))}
+                {recent.map((t) => {
+                  const bal = recentBalanceMap.get(t.id);
+                  return (
+                    <tr key={t.id}>
+                      <td data-label="Datum" className="whitespace-nowrap">{formatDate(t.date)}</td>
+                      <td data-label="Konto"><span className="text-xs text-slate-500">{t.account.type === "MAIN" ? "Haupt" : "GG"}</span></td>
+                      <td data-label="Gegenpartei" className="font-medium">{t.counterparty ?? "—"}</td>
+                      <td data-label="Verwendungszweck" className="text-slate-600">{t.purpose ?? "—"}</td>
+                      <td data-label="Kategorie">
+                        {t.category ? (
+                          <span className="chip" style={{ background: `${t.category.color}1A`, color: t.category.color }}>
+                            {t.category.name}
+                          </span>
+                        ) : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
+                        {formatEUR(t.amount)}
+                      </td>
+                      <td data-label={t.account.type === "MAIN" ? "Saldo Haupt" : "Saldo GG"} className="text-right font-mono tabular text-slate-700 whitespace-nowrap">
+                        {bal == null ? <span className="text-slate-300">—</span> : formatEUR(bal)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {recent.length === 0 && (
-                  <tr><td colSpan={6} className="text-center text-slate-500 py-10 no-stack-label">Noch keine Buchungen.</td></tr>
+                  <tr><td colSpan={7} className="text-center text-slate-500 py-10 no-stack-label">Noch keine Buchungen.</td></tr>
                 )}
               </tbody>
             </table>

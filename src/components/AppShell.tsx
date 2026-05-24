@@ -32,6 +32,7 @@ type NavItem = {
 const NAV: readonly NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Buchungen", icon: Receipt },
+  { href: "/accounts", label: "Konten & Saldo-Prüfung", icon: Banknote },
   { href: "/import", label: "Bank-Import (George)", icon: Upload, treasurerOnly: true },
   { href: "/members", label: "Mitglieder", icon: Users },
   { href: "/dues", label: "Beiträge & Mahnungen", icon: Mail },

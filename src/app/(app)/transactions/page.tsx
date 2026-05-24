@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentClubYear } from "@/lib/dataAccess";
+import { getAccountBalance, getCurrentClubYear } from "@/lib/dataAccess";
+import { computeRunningBalances } from "@/lib/runningBalance";
 import { formatDate, formatEUR } from "@/lib/format";
 import { TransactionsTable } from "./TransactionsTable";
 import Link from "next/link";
-import { Receipt, Plus } from "lucide-react";
+import { Receipt, Plus, Wallet } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 
@@ -52,6 +53,21 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const totalIn = txs.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const totalOut = txs.filter((t) => t.amount < 0).reduce((s, t) => s + t.amount, 0);
 
+  // Laufender Saldo je Buchung (über das gesamte Clubjahr, unabhängig vom Filter)
+  const accountIdsInView = [...new Set(txs.map((t) => t.accountId))];
+  const balanceMap = await computeRunningBalances({
+    accountIds: accountIdsInView,
+    clubYearIds: [cy.id],
+  });
+
+  // Aktuelle End-Salden (für Header-Karten)
+  const mainAcc = accounts.find((a) => a.type === "MAIN");
+  const ggAcc = accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST");
+  const [currentBalMain, currentBalGG] = await Promise.all([
+    mainAcc ? getAccountBalance(mainAcc.id, cy.id) : Promise.resolve(0),
+    ggAcc ? getAccountBalance(ggAcc.id, cy.id) : Promise.resolve(0),
+  ]);
+
   return (
     <div className="space-y-5 fade-up">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -69,6 +85,26 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           )}
         </div>
       </header>
+
+      {/* Aktuelle Kontostände im aktiven Clubjahr */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link href="/transactions?account=main" className="card-soft p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Hauptkonto · Saldo</div>
+            <div className="text-2xl font-bold tabular mt-0.5">{formatEUR(currentBalMain)}</div>
+            <div className="text-xs text-slate-500 mt-0.5 truncate">{mainAcc?.iban ?? ""}</div>
+          </div>
+          <Wallet className="text-blue-700 size-7 shrink-0" />
+        </Link>
+        <Link href="/transactions?account=gg" className="card-soft p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Global-Grant Treuhand · Saldo</div>
+            <div className="text-2xl font-bold tabular mt-0.5">{formatEUR(currentBalGG)}</div>
+            <div className="text-xs text-slate-500 mt-0.5 truncate">{ggAcc?.iban ?? ""}</div>
+          </div>
+          <Wallet className="text-amber-600 size-7 shrink-0" />
+        </Link>
+      </div>
 
       {/* Filters */}
       <form method="get" className="card-soft p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
@@ -127,6 +163,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           memberName: t.member ? `${t.member.lastName}, ${t.member.firstName}` : null,
           attachmentName: t.attachment?.fileName ?? null,
           attachmentId: t.attachment?.id ?? null,
+          balanceAfter: balanceMap.get(t.id) ?? null,
         }))}
         canEdit={isTreasurer}
       />

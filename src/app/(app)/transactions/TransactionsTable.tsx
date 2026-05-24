@@ -19,6 +19,8 @@ export type TxRow = {
   memberName: string | null;
   attachmentName: string | null;
   attachmentId: string | null;
+  /** Laufender Saldo NACH dieser Buchung (Konto + Clubjahr). */
+  balanceAfter: number | null;
 };
 
 export function TransactionsTable({ transactions, canEdit }: { transactions: TxRow[]; canEdit: boolean }) {
@@ -48,6 +50,7 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
                 <th>Mitglied</th>
                 <th>Beleg</th>
                 <th className="text-right">Betrag</th>
+                <th className="text-right whitespace-nowrap" title="Kontosaldo nach dieser Buchung">Saldo</th>
                 {canEdit && <th><span className="sr-only">Aktionen</span></th>}
               </tr>
             </thead>
@@ -81,6 +84,13 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
                   <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
                     {formatEUR(t.amount)}
                   </td>
+                  <td
+                    data-label={t.accountType === "MAIN" ? "Saldo Hauptkonto" : "Saldo GG"}
+                    className="text-right font-mono tabular text-slate-700 whitespace-nowrap"
+                    title={`Kontosaldo nach dieser Buchung (${t.accountType === "MAIN" ? "Hauptkonto" : "Global Grant"})`}
+                  >
+                    {t.balanceAfter == null ? <span className="text-slate-300">—</span> : formatEUR(t.balanceAfter)}
+                  </td>
                   {canEdit && (
                     <td data-label="Aktionen" className="text-right">
                       <div className="flex justify-end gap-1.5 flex-wrap">
@@ -96,7 +106,7 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
                 </tr>
               ))}
               {transactions.length === 0 && (
-                <tr><td colSpan={canEdit ? 9 : 8} className="text-center text-slate-500 py-12 no-stack-label">Keine Buchungen für diese Auswahl.</td></tr>
+                <tr><td colSpan={canEdit ? 10 : 9} className="text-center text-slate-500 py-12 no-stack-label">Keine Buchungen für diese Auswahl.</td></tr>
               )}
             </tbody>
           </table>
