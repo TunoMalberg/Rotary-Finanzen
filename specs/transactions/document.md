@@ -1,7 +1,7 @@
 # Konten & Buchungen
 
 ## Overview
-Zwei Bankkonten (Hauptkonto, Global-Grant-Treuhand) mit Buchungen je Clubjahr (1.8.–31.7.). Manuelle Buchungen + Bank-Import. Kategorien wie EAR-Excel: Einnahmen (Mitgliedsbeiträge, Aufnahmegebühr, Spenden, RYLA, Zinsen, Sonstiges) und Ausgaben (Distrikt, Rotary Intl., Spesen, RYLA, Spenden/Clubprojekte, Präsenzaufwand, Sonstiges, Saalmiete).
+Zwei Bankkonten (Hauptkonto, Global-Grant-Treuhand) mit Buchungen je Clubjahr (1.7.–30.6.). Manuelle Buchungen + Bank-Import. Kategorien wie EAR-Excel: Einnahmen (Mitgliedsbeiträge, Aufnahmegebühr, Spenden, RYLA, Zinsen, Sonstiges) und Ausgaben (Distrikt, Rotary Intl., Spesen, RYLA, Spenden/Clubprojekte, Präsenzaufwand, Sonstiges, Saalmiete).
 
 ## Goals
 - Liste/Filter aller Buchungen pro Konto+Clubjahr.

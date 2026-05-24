@@ -32,7 +32,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 - **PDF/CSV-Bank-Import:** Erste Bank/George CSV (Standardformat siehe `specs/import-george/document.md`)
 - **Internationalisierung:** Deutsch (de-AT)
 - **Datumsformat:** dd.MM.yyyy, Währung EUR (de-AT)
-- **Clubjahr:** 1.8. – 31.7. (intern als ROTARY_YEAR_START_MONTH=8). Aber laut User-Vorgabe: "endet jeweils am 31.7." → Clubjahr = 1.8.–31.7.
+- **Clubjahr:** 1.7. – 30.6. (intern als ROTARY_YEAR_START_MONTH=7, Index 6). Laut User-Vorgabe: "endet jeweils am 30.6." → Clubjahr = 1.7.–30.6.
 
 ## Architekturregeln
 - Server Components für Datenseiten, Client Components für interaktive Forms/Charts.
@@ -69,7 +69,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 ## Datenmodell (high-level)
 ```
 User(id, email, name, role, passwordHash)
-ClubYear(id, label "2025/2026", startsAt 2025-08-01, endsAt 2026-07-31, isClosed)
+ClubYear(id, label "2025/2026", startsAt 2025-07-01, endsAt 2026-06-30, isClosed)
 Account(id, name, iban, type [MAIN|GLOBAL_GRANT_TRUST])
 Category(id, name, kind [INCOME|EXPENSE], isDuesCategory, color)
 Member(id, rotaryMemberId, lastName, firstName, salutation, address, city, postalCode, country,

@@ -32,18 +32,18 @@ export function formatDateInput(d: Date | string | null | undefined) {
 }
 
 export function clubYearLabel(date: Date) {
-  // Rotary year ends 31.7. So Aug-Dec belong to next year-pair.
+  // Rotary club year runs 1.7. – 30.6. So Jul-Dec belong to next year-pair.
   const y = date.getUTCFullYear();
   const m = date.getUTCMonth(); // 0-based
-  if (m >= 7) return `${y}/${y + 1}`; // Aug or later
+  if (m >= 6) return `${y}/${y + 1}`; // Jul or later
   return `${y - 1}/${y}`;
 }
 
 export function clubYearBounds(label: string): { startsAt: Date; endsAt: Date } {
   const [a, b] = label.split("/").map(Number);
   return {
-    startsAt: new Date(Date.UTC(a, 7, 1)), // 1.8.
-    endsAt: new Date(Date.UTC(b, 6, 31, 23, 59, 59)), // 31.7.
+    startsAt: new Date(Date.UTC(a, 6, 1)), // 1.7.
+    endsAt: new Date(Date.UTC(b, 5, 30, 23, 59, 59)), // 30.6.
   };
 }
 

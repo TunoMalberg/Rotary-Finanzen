@@ -8,7 +8,7 @@ import { autoCategoryName } from "@/lib/categorize";
 function parseClubYearLabel(label: string) {
   if (!/^\d{4}\/\d{4}$/.test(label)) throw new Error("Format YYYY/YYYY");
   const [a, b] = label.split("/").map(Number);
-  return { a, b, startsAt: new Date(Date.UTC(a, 7, 1)), endsAt: new Date(Date.UTC(b, 6, 31, 23, 59, 59)) };
+  return { a, b, startsAt: new Date(Date.UTC(a, 6, 1)), endsAt: new Date(Date.UTC(b, 5, 30, 23, 59, 59)) };
 }
 
 export async function POST(req: Request) {

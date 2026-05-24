@@ -82,8 +82,8 @@ async function main() {
     update: {},
     create: {
       label: "2024/2025",
-      startsAt: new Date(Date.UTC(2024, 7, 1)),
-      endsAt: new Date(Date.UTC(2025, 6, 31, 23, 59, 59)),
+      startsAt: new Date(Date.UTC(2024, 6, 1)), // 1.7.2024
+      endsAt: new Date(Date.UTC(2025, 5, 30, 23, 59, 59)), // 30.6.2025
       isClosed: true,
     },
   });
@@ -92,8 +92,8 @@ async function main() {
     update: {},
     create: {
       label: "2025/2026",
-      startsAt: new Date(Date.UTC(2025, 7, 1)),
-      endsAt: new Date(Date.UTC(2026, 6, 31, 23, 59, 59)),
+      startsAt: new Date(Date.UTC(2025, 6, 1)), // 1.7.2025
+      endsAt: new Date(Date.UTC(2026, 5, 30, 23, 59, 59)), // 30.6.2026
       isClosed: false,
       openingBalanceMain: 59838.49,
       openingBalanceGG: -54.99,

@@ -1,7 +1,7 @@
 # Vergleichs-Charts
 
 ## Overview
-Vergleich Einnahmen-/Ausgaben-Kategorien zwischen Clubjahren. Grouped-Bar-Chart und Stacked-Area über das Clubjahr (1.8.–31.7.).
+Vergleich Einnahmen-/Ausgaben-Kategorien zwischen Clubjahren. Grouped-Bar-Chart und Stacked-Area über das Clubjahr (1.7.–30.6.).
 
 ## User flows
 - `/reports` Seite mit Filtern: Jahre wählen (Mehrfachauswahl), Konto-Typ.

@@ -15,8 +15,8 @@ export async function POST(req: Request) {
   const cy = await prisma.clubYear.create({
     data: {
       label,
-      startsAt: new Date(Date.UTC(a, 7, 1)),
-      endsAt: new Date(Date.UTC(b, 6, 31, 23, 59, 59)),
+      startsAt: new Date(Date.UTC(a, 6, 1)), // 1.7.
+      endsAt: new Date(Date.UTC(b, 5, 30, 23, 59, 59)), // 30.6.
     },
   });
   return NextResponse.json(cy);
