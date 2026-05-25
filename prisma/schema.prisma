@@ -39,18 +39,25 @@ model ClubYear {
   invoices     Invoice[]
   attendanceLists AttendanceList[]
   archivedYear ArchivedYear?
+  categories   Category[]
   createdAt    DateTime @default(now())
 }
 
 model Category {
   id              String   @id @default(cuid())
-  name            String   @unique
+  name            String
   kind            String   // INCOME | EXPENSE | NEUTRAL
   color           String   @default("#17458F")
   isDuesCategory  Boolean  @default(false)
   sortOrder       Int      @default(0)
+  /// Optional clubyear scope. NULL = global category (verfügbar in allen Clubjahren).
+  /// Gesetzt = nur in diesem Clubjahr verfügbar (z. B. Projekt-Kategorien).
+  clubYearId      String?
+  clubYear        ClubYear? @relation(fields: [clubYearId], references: [id])
   transactions    Transaction[]
   budgetLines     BudgetLine[]
+
+  @@unique([clubYearId, name])
 }
 
 model Member {

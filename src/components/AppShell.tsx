@@ -1,27 +1,28 @@
 "use client";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
-import { RotaryLogo } from "./RotaryLogo";
 import {
+  Archive,
+  Banknote,
+  FolderKanban,
   LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Mail,
+  Menu,
+  PieChart,
   Receipt,
+  Settings,
+  Tags,
+  TrendingUp,
   Upload,
   Users,
   Wallet,
-  TrendingUp,
-  PieChart,
-  Archive,
-  LogOut,
-  ListChecks,
-  Mail,
-  Settings,
-  Banknote,
-  FolderKanban,
-  Menu,
   X,
 } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { RotaryLogo } from "./RotaryLogo";
 
 type NavItem = {
   href: string;
@@ -35,15 +36,30 @@ const NAV: readonly NavItem[] = [
   { href: "/transactions", label: "Buchungen", icon: Receipt },
   { href: "/projects", label: "Clubprojekte", icon: FolderKanban },
   { href: "/accounts", label: "Konten & Saldo-Prüfung", icon: Banknote },
-  { href: "/import", label: "Bank-Import (George)", icon: Upload, treasurerOnly: true },
+  {
+    href: "/import",
+    label: "Bank-Import (George)",
+    icon: Upload,
+    treasurerOnly: true,
+  },
   { href: "/members", label: "Mitglieder", icon: Users },
   { href: "/dues", label: "Beiträge & Mahnungen", icon: Mail },
-  { href: "/attendance", label: "Auslagen / Teilnahmelisten", icon: ListChecks },
+  {
+    href: "/attendance",
+    label: "Auslagen / Teilnahmelisten",
+    icon: ListChecks,
+  },
   { href: "/budget", label: "Budget", icon: Wallet },
   { href: "/cashflow", label: "Liquiditätsplanung", icon: TrendingUp },
+  { href: "/categories", label: "Kategorien", icon: Tags, treasurerOnly: true },
   { href: "/reports", label: "Vergleichscharts", icon: PieChart },
   { href: "/archive", label: "Archiv & Clubjahre", icon: Archive },
-  { href: "/settings/users", label: "Benutzer", icon: Settings, treasurerOnly: true },
+  {
+    href: "/settings/users",
+    label: "Benutzer",
+    icon: Settings,
+    treasurerOnly: true,
+  },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -64,7 +80,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (mobileOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [mobileOpen]);
 
@@ -75,8 +93,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3 min-w-0">
           <RotaryLogo size={36} />
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-widest text-white/70">Rotary Club</div>
-            <div className="font-bold text-lg leading-tight truncate">Wien-Donau</div>
+            <div className="text-[11px] uppercase tracking-widest text-white/70">
+              Rotary Club
+            </div>
+            <div className="font-bold text-lg leading-tight truncate">
+              Wien-Donau
+            </div>
           </div>
         </div>
         <button
@@ -91,7 +113,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
         {items.map((n) => {
           const Icon = n.icon;
-          const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
+          const active =
+            pathname === n.href || pathname.startsWith(`${n.href}/`);
           return (
             <Link
               key={n.href}
@@ -127,7 +150,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Navigation">
+        <div
+          className="lg:hidden fixed inset-0 z-50 flex"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation"
+        >
           <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
@@ -141,9 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header
-          className="bg-white/95 border-b border-slate-200 sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/85 safe-top"
-        >
+        <header className="bg-white/95 border-b border-slate-200 sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/85 safe-top">
           <div className="px-3 sm:px-5 lg:px-8 h-14 flex items-center justify-between gap-3">
             {/* Mobile: menu button + logo */}
             <div className="flex items-center gap-2 min-w-0 lg:hidden">
@@ -159,17 +185,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2 min-w-0">
                 <RotaryLogo size={26} />
                 <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-widest text-slate-500 leading-none">Rotary</div>
-                  <div className="font-bold text-sm text-slate-900 truncate">Wien-Donau</div>
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 leading-none">
+                    Rotary
+                  </div>
+                  <div className="font-bold text-sm text-slate-900 truncate">
+                    Wien-Donau
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Desktop breadcrumb */}
             <div className="hidden lg:flex items-center gap-3 text-sm min-w-0">
-              <span className="font-semibold text-slate-800">Schatzmeisterei</span>
+              <span className="font-semibold text-slate-800">
+                Schatzmeisterei
+              </span>
               <span className="text-slate-400">·</span>
-              <span className="text-slate-500 truncate">{currentPageLabel(pathname)}</span>
+              <span className="text-slate-500 truncate">
+                {currentPageLabel(pathname)}
+              </span>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -178,7 +212,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {session?.user?.name ?? "—"}
                 </div>
                 <div className="text-slate-500 capitalize">
-                  {role === "treasurer" ? "Schatzmeister" : role === "president" ? "Präsident" : role}
+                  {role === "treasurer"
+                    ? "Schatzmeister"
+                    : role === "president"
+                      ? "Präsident"
+                      : role}
                 </div>
               </div>
               <button
@@ -196,7 +234,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="lg:hidden px-3 pb-2 text-xs text-slate-500 flex items-center gap-1.5">
             <span>Schatzmeisterei</span>
             <span className="text-slate-300">›</span>
-            <span className="text-slate-700 font-medium truncate">{currentPageLabel(pathname)}</span>
+            <span className="text-slate-700 font-medium truncate">
+              {currentPageLabel(pathname)}
+            </span>
           </div>
         </header>
 
@@ -209,6 +249,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function currentPageLabel(pathname: string) {
-  const item = NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
+  const item = NAV.find(
+    (n) => pathname === n.href || pathname.startsWith(`${n.href}/`),
+  );
   return item?.label ?? "";
 }

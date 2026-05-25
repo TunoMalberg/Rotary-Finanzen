@@ -34,24 +34,32 @@ async function main() {
     },
   });
 
-  // --- Categories ---
+  // --- Categories (global = clubYearId null) ---
   for (const c of CATEGORY_SEED) {
-    await prisma.category.upsert({
-      where: { name: c.name },
-      update: {
-        kind: c.kind,
-        color: c.color,
-        isDuesCategory: c.isDuesCategory ?? false,
-        sortOrder: c.sortOrder,
-      },
-      create: {
-        name: c.name,
-        kind: c.kind,
-        color: c.color,
-        isDuesCategory: c.isDuesCategory ?? false,
-        sortOrder: c.sortOrder,
-      },
+    const existing = await prisma.category.findFirst({
+      where: { name: c.name, clubYearId: null },
     });
+    if (existing) {
+      await prisma.category.update({
+        where: { id: existing.id },
+        data: {
+          kind: c.kind,
+          color: c.color,
+          isDuesCategory: c.isDuesCategory ?? false,
+          sortOrder: c.sortOrder,
+        },
+      });
+    } else {
+      await prisma.category.create({
+        data: {
+          name: c.name,
+          kind: c.kind,
+          color: c.color,
+          isDuesCategory: c.isDuesCategory ?? false,
+          sortOrder: c.sortOrder,
+        },
+      });
+    }
   }
 
   // --- Accounts ---

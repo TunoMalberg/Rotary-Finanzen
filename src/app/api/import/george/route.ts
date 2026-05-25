@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { authOptions, isTreasurer } from "@/lib/auth";
+import { parseBankFile } from "@/lib/bankImport";
+import { autoCategoryName, rankCategories } from "@/lib/categorize";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions, isTreasurer } from "@/lib/auth";
-import { autoCategoryName } from "@/lib/categorize";
-import { parseBankFile } from "@/lib/bankImport";
+import { NextResponse } from "next/server";
 
 /**
  * POST /api/import/george
@@ -36,11 +36,31 @@ export async function POST(req: Request) {
   const dryRun = String(fd.get("dryRun") ?? "") === "true";
   /** Wenn true → ALLE Zeilen importieren (kein Cutoff anhand letzter Buchung). */
   const importAll = String(fd.get("importAll") ?? "") === "true";
+  /**
+   * Optionale User-Zuordnungen aus dem Zuordnungs-Dialog.
+   * { rowKey: { categoryId?: string|null, projectId?: string|null } }
+   * rowKey = `${date.toISOString()}|${amount}|${externalRef ?? ""}|${purposeHash}`.
+   */
+  let userAssignments: Record<
+    string,
+    { categoryId?: string | null; projectId?: string | null }
+  > = {};
+  const assignmentsRaw = fd.get("assignments");
+  if (typeof assignmentsRaw === "string" && assignmentsRaw.trim()) {
+    try {
+      userAssignments = JSON.parse(assignmentsRaw);
+    } catch {
+      // ignore
+    }
+  }
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "no file" }, { status: 400 });
   }
   if (!accountId || !clubYearId) {
-    return NextResponse.json({ error: "accountId/clubYearId fehlen" }, { status: 400 });
+    return NextResponse.json(
+      { error: "accountId/clubYearId fehlen" },
+      { status: 400 },
+    );
   }
 
   let parseResult;
@@ -48,7 +68,10 @@ export async function POST(req: Request) {
     parseResult = await parseBankFile(file);
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Datei konnte nicht gelesen werden." },
+      {
+        error:
+          e instanceof Error ? e.message : "Datei konnte nicht gelesen werden.",
+      },
       { status: 400 },
     );
   }
@@ -70,11 +93,16 @@ export async function POST(req: Request) {
   const lastDate: Date | null = lastTx?.date ?? null;
 
   // Stammdaten
+  // Kategorien: globale (clubYearId=NULL) UND year-spezifische des aktuellen Clubjahrs
   const [cats, members] = await Promise.all([
-    prisma.category.findMany(),
+    prisma.category.findMany({
+      where: { OR: [{ clubYearId: null }, { clubYearId }] },
+      orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    }),
     prisma.member.findMany({ select: { id: true, lastName: true } }),
   ]);
   const catByName = new Map(cats.map((c) => [c.name, c.id]));
+  const catById = new Map(cats.map((c) => [c.id, c]));
 
   // ImportBatch (nur in echten Imports)
   let batchId: string | null = null;
@@ -90,17 +118,44 @@ export async function POST(req: Request) {
     batchId = batch.id;
   }
 
+  type Suggestion = {
+    id: string;
+    name: string;
+    kind: string;
+    color: string;
+    score: number;
+  };
   type PreviewRow = {
+    rowKey: string;
     date: string;
     counterparty: string | null;
     purpose: string | null;
     amount: number;
     category: string | null;
+    /** ID der initial vorgeschlagenen Kategorie (auto). */
+    suggestedCategoryId: string | null;
+    /** Top-N alternative Vorschläge mit Score (sortiert absteigend). */
+    suggestions: Suggestion[];
     isDuplicate: boolean;
     isSkippedOlder: boolean;
     matchedMember: string | null;
     externalRef: string | null;
   };
+
+  function makeRowKey(
+    date: Date,
+    amount: number,
+    externalRef: string | null,
+    purpose: string | null,
+  ): string {
+    // simple hash of purpose to keep length bounded
+    let h = 0;
+    const s = purpose ?? "";
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    }
+    return `${date.toISOString()}|${amount}|${externalRef ?? ""}|${h}`;
+  }
 
   const preview: PreviewRow[] = [];
   let created = 0;
@@ -114,16 +169,20 @@ export async function POST(req: Request) {
     const purpose = r.purpose ?? null;
     const counterparty = r.counterparty ?? null;
     const externalRef = r.externalRef ?? null;
+    const rowKey = makeRowKey(r.date, r.amount, externalRef, purpose);
 
     // Älter als letzte Buchung → skippen, außer importAll=true
     if (isOlder && !importAll) {
       skippedOlder++;
       preview.push({
+        rowKey,
         date: r.date.toISOString(),
         counterparty,
         purpose,
         amount: r.amount,
         category: null,
+        suggestedCategoryId: null,
+        suggestions: [],
         isDuplicate: false,
         isSkippedOlder: true,
         matchedMember: null,
@@ -142,7 +201,12 @@ export async function POST(req: Request) {
     //      (externalRef + counterparty + ggf. fehlende Infos nachpflegen)
     //      statt ein Duplikat zu erzeugen.
     let dup = null as { id: string } | null;
-    let upgradeTarget: { id: string; counterparty: string | null; purpose: string | null; externalRef: string | null } | null = null;
+    let upgradeTarget: {
+      id: string;
+      counterparty: string | null;
+      purpose: string | null;
+      externalRef: string | null;
+    } | null = null;
     if (externalRef) {
       // Wichtig: nur als Duplikat werten, wenn auch Betrag + Zweck identisch sind.
       // George/Erste vergibt mehreren Quartals-Spesen am 31.3./30.6./30.9./31.12.
@@ -181,7 +245,12 @@ export async function POST(req: Request) {
           externalRef: null,
           deletedAt: null,
         },
-        select: { id: true, counterparty: true, purpose: true, externalRef: true },
+        select: {
+          id: true,
+          counterparty: true,
+          purpose: true,
+          externalRef: true,
+        },
       });
       if (candidate) {
         dup = { id: candidate.id };
@@ -203,11 +272,14 @@ export async function POST(req: Request) {
       }
       duplicates++;
       preview.push({
+        rowKey,
         date: r.date.toISOString(),
         counterparty,
         purpose,
         amount: r.amount,
         category: null,
+        suggestedCategoryId: null,
+        suggestions: [],
         isDuplicate: true,
         isSkippedOlder: false,
         matchedMember: null,
@@ -216,9 +288,34 @@ export async function POST(req: Request) {
       continue;
     }
 
-    // Auto-Kategorisierung
-    const cat = autoCategoryName({ purpose, counterparty, code: r.partnerIban, amount: r.amount });
-    const categoryId = cat ? catByName.get(cat.name) ?? null : null;
+    // Auto-Kategorisierung + Top-Vorschläge
+    const cat = autoCategoryName({
+      purpose,
+      counterparty,
+      code: r.partnerIban,
+      amount: r.amount,
+    });
+    const autoCategoryId = cat ? (catByName.get(cat.name) ?? null) : null;
+    const ranked = rankCategories(
+      cats.map((c) => ({
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        color: c.color,
+      })),
+      { purpose, counterparty, code: r.partnerIban, amount: r.amount },
+      4,
+    );
+    // User override has priority over auto, falls back to auto
+    const userOverride = userAssignments[rowKey];
+    const finalCategoryId =
+      userOverride?.categoryId !== undefined
+        ? userOverride.categoryId
+        : autoCategoryId;
+    const finalProjectId = userOverride?.projectId ?? null;
+    const finalCategoryName = finalCategoryId
+      ? (catById.get(finalCategoryId)?.name ?? null)
+      : null;
 
     // Mitglieds-Match
     let memberId: string | null = null;
@@ -243,7 +340,8 @@ export async function POST(req: Request) {
           purpose,
           code: r.partnerIban,
           amount: r.amount,
-          categoryId,
+          categoryId: finalCategoryId,
+          projectId: finalProjectId,
           memberId,
           source: "IMPORT",
           importBatchId: batchId,
@@ -263,7 +361,11 @@ export async function POST(req: Request) {
         if (inv) {
           await prisma.invoice.update({
             where: { id: inv.id },
-            data: { status: "PAID", paidAt: new Date(), paidTransactionId: txn.id },
+            data: {
+              status: "PAID",
+              paidAt: new Date(),
+              paidTransactionId: txn.id,
+            },
           });
           autoMatched++;
         }
@@ -272,17 +374,27 @@ export async function POST(req: Request) {
 
     created++;
     preview.push({
+      rowKey,
       date: r.date.toISOString(),
       counterparty,
       purpose,
       amount: r.amount,
-      category: cat?.name ?? null,
+      category: finalCategoryName,
+      suggestedCategoryId: autoCategoryId,
+      suggestions: ranked,
       isDuplicate: false,
       isSkippedOlder: false,
       matchedMember: memberName,
       externalRef,
     });
   }
+
+  // Aktive Projekte des Clubs (project select happens client-side)
+  const projects = await prisma.project.findMany({
+    where: { isClosed: false },
+    select: { id: true, code: true, name: true, color: true },
+    orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+  });
 
   return NextResponse.json({
     source,
@@ -294,6 +406,14 @@ export async function POST(req: Request) {
     lastExistingDate: lastDate ? lastDate.toISOString() : null,
     importAll,
     dryRun,
-    preview: preview.slice(0, 200),
+    preview: preview.slice(0, 1000),
+    categories: cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      kind: c.kind,
+      color: c.color,
+      clubYearId: c.clubYearId,
+    })),
+    projects,
   });
 }
