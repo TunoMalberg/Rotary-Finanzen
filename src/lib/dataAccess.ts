@@ -1,11 +1,31 @@
 import { prisma } from "./prisma";
 
+/**
+ * Liefert das laufende Clubjahr.
+ *
+ * Reihenfolge:
+ *  1) Das Clubjahr, das den heutigen Tag enthält (1.7.–30.6.) und nicht fixiert ist.
+ *  2) Ein nicht-fixiertes (`lockedAt = null`) und nicht abgeschlossenes Jahr.
+ *  3) Letzter Fallback: jüngstes nicht-fixiertes Jahr.
+ *  4) Allerletzter Fallback: jüngstes Jahr überhaupt.
+ */
 export async function getCurrentClubYear() {
-  const cy = await prisma.clubYear.findFirst({
-    where: { isClosed: false },
+  const today = new Date();
+  const inRange = await prisma.clubYear.findFirst({
+    where: { startsAt: { lte: today }, endsAt: { gte: today }, lockedAt: null },
     orderBy: { startsAt: "desc" },
   });
-  if (cy) return cy;
+  if (inRange) return inRange;
+  const open = await prisma.clubYear.findFirst({
+    where: { isClosed: false, lockedAt: null },
+    orderBy: { startsAt: "desc" },
+  });
+  if (open) return open;
+  const notLocked = await prisma.clubYear.findFirst({
+    where: { lockedAt: null },
+    orderBy: { startsAt: "desc" },
+  });
+  if (notLocked) return notLocked;
   const fallback = await prisma.clubYear.findFirst({ orderBy: { startsAt: "desc" } });
   if (!fallback) throw new Error("Kein Clubjahr vorhanden – bitte seeden.");
   return fallback;

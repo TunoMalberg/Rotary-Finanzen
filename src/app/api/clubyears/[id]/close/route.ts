@@ -63,7 +63,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     });
   }
 
-  await prisma.clubYear.update({ where: { id }, data: { isClosed: true } });
+  await prisma.clubYear.update({
+    where: { id },
+    data: { isClosed: true, closedAt: new Date(), closedById: session?.user?.id },
+  });
   await prisma.archivedYear.upsert({
     where: { clubYearId: id },
     update: {

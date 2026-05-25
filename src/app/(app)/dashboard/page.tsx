@@ -6,6 +6,7 @@ import { formatEUR, formatDate } from "@/lib/format";
 import Link from "next/link";
 import { ArrowUpRight, ArrowDownRight, Wallet, Mail, AlertTriangle, Receipt, FolderKanban, ChevronRight } from "lucide-react";
 import { DashboardCharts } from "./DashboardCharts";
+import { SollIstWidget, type SollIstRow } from "@/components/SollIstWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,23 @@ export default async function DashboardPage() {
   const recentBalanceMap = await computeRunningBalances({
     accountIds: [...new Set(recent.map((t) => t.accountId))],
     clubYearIds: [cy.id],
+  });
+
+  // Soll/Ist-Daten für Widget
+  const allCategories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
+  const budgetLines = await prisma.budgetLine.findMany({ where: { clubYearId: cy.id } });
+  const allTotals = await getCategoryTotals(cy.id);
+  const sollIstRows: SollIstRow[] = allCategories.map((c) => {
+    const line = budgetLines.find((l) => l.categoryId === c.id);
+    const actual = allTotals.find((t) => t.id === c.id)?.amount ?? 0;
+    return {
+      categoryId: c.id,
+      categoryName: c.name,
+      kind: c.kind as SollIstRow["kind"],
+      color: c.color,
+      budget: line?.amount ?? 0,
+      actual,
+    };
   });
 
   const projectTotals = await getProjectTotals();
@@ -225,6 +243,9 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Soll/Ist */}
+      <SollIstWidget rows={sollIstRows} clubYearLabel={cy.label} />
 
       {/* Charts */}
       <DashboardCharts totals={totals} />

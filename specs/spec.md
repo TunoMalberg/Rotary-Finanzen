@@ -68,6 +68,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 | 10 | Archiv historischer Jahre | [specs/archive/document.md](archive/document.md) | done |
 | 11 | Responsive Design (Mobile-first, iPhone Pro Max …) | [specs/responsive/document.md](responsive/document.md) | done |
 | 12 | Konto-Saldo: laufender Saldo pro Buchung + Audit der Jahres-Übernahme | [specs/account-balance-audit/document.md](account-balance-audit/document.md) | done |
+| 13 | Clubjahr-Lebenszyklus + EAR-Excel-Export/-Re-Import + Soll/Ist | [specs/year-lifecycle/document.md](year-lifecycle/document.md) | done |
 
 ## Datenmodell (high-level)
 ```

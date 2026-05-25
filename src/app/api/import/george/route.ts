@@ -62,6 +62,15 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  // Lifecycle-Schutz: in fixierte Jahre niemals importieren.
+  const targetYear = await prisma.clubYear.findUnique({ where: { id: clubYearId } });
+  if (!targetYear) return NextResponse.json({ error: "Clubjahr nicht gefunden" }, { status: 400 });
+  if (targetYear.lockedAt) {
+    return NextResponse.json(
+      { error: `Clubjahr ${targetYear.label} ist fixiert – Bank-Import nicht möglich.` },
+      { status: 409 },
+    );
+  }
 
   let parseResult;
   try {

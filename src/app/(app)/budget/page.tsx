@@ -35,9 +35,18 @@ export default async function BudgetPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="space-y-5 fade-up">
-      <header>
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet className="size-6 text-blue-800" /> Budget</h1>
-        <p className="text-slate-500 text-sm">Clubjahr {cy.label}</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet className="size-6 text-blue-800" /> Budget · Soll/Ist</h1>
+          <p className="text-slate-500 text-sm">Clubjahr {cy.label} – während und am Ende des Jahres jederzeit vergleichen.</p>
+        </div>
+        <a
+          href={`/api/clubyears/${cy.id}/export`}
+          className="btn-ghost text-sm"
+          title="EAR-Excel-Datei für dieses Clubjahr herunterladen"
+        >
+          Excel-Export
+        </a>
       </header>
       <form method="get" className="card-soft p-3 flex gap-3 items-center">
         <label className="text-sm text-slate-600">Clubjahr:</label>

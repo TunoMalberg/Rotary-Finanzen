@@ -30,7 +30,19 @@ model ClubYear {
   label               String   @unique // '2025/2026'
   startsAt            DateTime
   endsAt              DateTime
+  /// Schatzmeister hat die Bücher fertig geschlossen (1. Stufe).
+  /// Solange `lockedAt` NULL ist, kann der Schatzmeister noch korrigieren.
   isClosed            Boolean  @default(false)
+  closedAt            DateTime?
+  closedById          String?
+  /// Rechnungsprüfer haben das Jahr geprüft (Stufe 2).
+  auditedAt           DateTime?
+  auditedById         String?
+  auditNotes          String?
+  /// Mitgliederversammlung hat das Jahr beschlossen → endgültig fixiert (Stufe 3).
+  /// Ab hier: ausschließlich lesbar, archiviert.
+  lockedAt            DateTime?
+  lockedById          String?
   openingBalanceMain  Float    @default(0)
   openingBalanceGG    Float    @default(0)
   transactions Transaction[]

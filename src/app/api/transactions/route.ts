@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
+import { checkClubYearMutable } from "@/lib/clubYearLifecycle";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const body = await req.json();
+  const cy = await prisma.clubYear.findUnique({ where: { id: body.clubYearId } });
+  if (!cy) return NextResponse.json({ error: "Clubjahr nicht gefunden" }, { status: 400 });
+  const guard = checkClubYearMutable(cy, { role: session?.user?.role, allowCorrection: !!body.allowCorrection });
+  if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 409 });
+
   const tx = await prisma.transaction.create({
     data: {
       accountId: body.accountId,

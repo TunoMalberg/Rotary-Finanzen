@@ -203,6 +203,8 @@
 .chip-active     { background: #d1fae5; color: #065f46; }
 .chip-income     { background: #d1fae5; color: #065f46; }
 .chip-expense    { background: #fee2e2; color: #7f1d1d; }
+.chip-info       { background: #dbeafe; color: #1e3a8a; }
+.chip-warn       { background: #fef3c7; color: #78350f; }
 
 .amount-pos { color: #047857; font-variant-numeric: tabular-nums; }
 .amount-neg { color: #b91c1c; font-variant-numeric: tabular-nums; }
