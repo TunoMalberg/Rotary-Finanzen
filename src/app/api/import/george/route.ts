@@ -24,6 +24,22 @@ import { NextResponse } from "next/server";
  * Mit `dryRun=true` wird nur eine Vorschau erzeugt.
  */
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (e) {
+    // Wir wollen, dass der Schatzmeister im UI den echten Grund sieht
+    // (statt eines generischen „Import fehlgeschlagen"). Daher Fehler hier
+    // einfangen, ins Vercel-Log schreiben und als JSON zurückliefern.
+    console.error("[/api/import/george] failed:", e);
+    const msg =
+      e instanceof Error
+        ? `${e.name}: ${e.message}`
+        : "Unbekannter Fehler beim Import.";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+async function handle(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -103,15 +119,17 @@ export async function POST(req: Request) {
 
   // Stammdaten
   // Kategorien: globale (clubYearId=NULL) UND year-spezifische des aktuellen Clubjahrs
-  const [cats, members] = await Promise.all([
+  const [cats, members, projectIds] = await Promise.all([
     prisma.category.findMany({
       where: { OR: [{ clubYearId: null }, { clubYearId }] },
       orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.member.findMany({ select: { id: true, lastName: true } }),
+    prisma.project.findMany({ select: { id: true } }),
   ]);
   const catByName = new Map(cats.map((c) => [c.name, c.id]));
   const catById = new Map(cats.map((c) => [c.id, c]));
+  const validProjectIds = new Set(projectIds.map((p) => p.id));
 
   // ImportBatch (nur in echten Imports)
   let batchId: string | null = null;
@@ -315,13 +333,26 @@ export async function POST(req: Request) {
       { purpose, counterparty, code: r.partnerIban, amount: r.amount },
       4,
     );
-    // User override has priority over auto, falls back to auto
+    // User override has priority over auto, falls back to auto.
+    // Wichtig: leere Strings ("") aus dem Frontend zu null normalisieren —
+    // sonst FK-Violation in Postgres (SQLite war hier still nachsichtig).
     const userOverride = userAssignments[rowKey];
-    const finalCategoryId =
-      userOverride?.categoryId !== undefined
-        ? userOverride.categoryId
-        : autoCategoryId;
-    const finalProjectId = userOverride?.projectId ?? null;
+    const normalize = (v: unknown): string | null => {
+      if (v == null) return null;
+      const s = String(v).trim();
+      return s === "" ? null : s;
+    };
+    let finalCategoryId: string | null;
+    if (userOverride && "categoryId" in userOverride) {
+      finalCategoryId = normalize(userOverride.categoryId);
+    } else {
+      finalCategoryId = autoCategoryId;
+    }
+    // Falls die zugewiesene Kategorie nicht (mehr) existiert → ignorieren.
+    if (finalCategoryId && !catById.has(finalCategoryId)) finalCategoryId = null;
+    let finalProjectId = normalize(userOverride?.projectId);
+    if (finalProjectId && !validProjectIds.has(finalProjectId))
+      finalProjectId = null;
     const finalCategoryName = finalCategoryId
       ? (catById.get(finalCategoryId)?.name ?? null)
       : null;
