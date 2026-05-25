@@ -158,10 +158,15 @@ model Transaction {
   createdAt     DateTime    @default(now())
   deletedAt     DateTime?
 
-  // George/Erste vergibt mehreren zusammengehörigen Buchungen am
-  // gleichen Tag (z. B. Quartalsspesen) dieselbe Buchungsreferenz, daher
-  // muss die Eindeutigkeit Betrag + Zweck mit einbeziehen.
-  @@unique([accountId, externalRef, amount, purpose])
+  // Bewusst KEIN DB-Unique-Constraint:
+  //   - Ein Mitglied kann legitim mehrfach denselben Betrag mit demselben
+  //     Verwendungszweck einzahlen (mehrere Mitgliedsbeiträge im Lauf der
+  //     Zeit, identische Sammeleinzüge, Refundierung + erneute Buchung).
+  //   - George vergibt Quartalsspesen sogar dieselbe Bank-Buchungsreferenz.
+  // Duplikat-Erkennung erfolgt deshalb auf Application-Ebene im
+  // Bank-Import-Handler (externalRef + Fallback date+amount+purpose +
+  // Upgrade-Pfad für seed-importierte Buchungen ohne externalRef).
+  @@index([accountId, externalRef])
   @@index([accountId, clubYearId, date])
   @@index([memberId])
   @@index([categoryId])
