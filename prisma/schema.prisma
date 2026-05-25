@@ -3,8 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooler-URL für Runtime-Queries (Vercel Postgres / Neon)
+  url       = env("DATABASE_URL")
+  // Direkte URL ohne Pooler – wird von Prisma für Migrations / `db push` benötigt.
+  // Vercel Postgres setzt diese Variable automatisch beim Connect-Project.
+  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 model User {

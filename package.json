@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0 --turbopack",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
-    "build": "prisma generate; BUILD_DIR=.next-build next build",
+    "build": "prisma generate && prisma db push --skip-generate --accept-data-loss && BUILD_DIR=.next-build next build",
     "build:local": "BUILD_DIR=.next-build next build",
+    "db:push": "prisma db push",
+    "db:seed": "bun run prisma/seed.ts",
     "lint": "bunx biome lint --write && bunx tsc --noEmit",
     "format": "bunx biome format --write"
   },
