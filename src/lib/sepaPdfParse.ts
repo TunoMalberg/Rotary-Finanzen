@@ -70,15 +70,13 @@ function parseGermanDate(s: string): Date | null {
   return new Date(Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1])));
 }
 
-/** Laden der Lines aus pdfjs-dist (legacy build, läuft serverseitig).
- *  pdfjs-dist ist als `serverExternalPackages` in next.config.js eingetragen,
- *  damit der Worker zur Laufzeit aus node_modules geladen wird. */
+/** Laden der Lines aus pdfjs-serverless – ein Fork von pdfjs-dist, der ohne
+ *  DOMMatrix/Path2D-Polyfills in Node-/Edge-Runtimes läuft (Vercel-kompatibel).
+ *  pdfjs-dist v5 würde "DOMMatrix is not defined" werfen. */
 async function pdfToLines(buf: ArrayBuffer): Promise<string[]> {
-  const pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs") = await import(
-    "pdfjs-dist/legacy/build/pdf.mjs"
-  );
+  const { getDocument } = await import("pdfjs-serverless");
   const data = new Uint8Array(buf);
-  const doc = await pdfjs.getDocument({
+  const doc = await getDocument({
     data,
     useSystemFonts: true,
     disableFontFace: true,
@@ -117,14 +115,27 @@ async function pdfToLines(buf: ArrayBuffer): Promise<string[]> {
  * Erkennt Zeilen wie:
  *   "Auersperg Ferdinand Rotary Mitgliedsbeitrag 7/25-6/26 580,00 EUR"
  *   "Engel Prof. Dr. Alfred Rotary Mitgliedsbeitrag 7/25-6/26 580,00 EUR"
+ *   "TICHY DR: GEISERICH Rotary Reise Führungen 120,00 EUR"
  *
  * Capture-Gruppen: 1=name, 2=info, 3=amount
+ *
+ * Drei Varianten in Priorität: Mitgliedsbeitrag (mit Datums-Suffix),
+ * Rotary-prefixierte Info (z. B. "Rotary Reise Führungen"),
+ * generischer Fallback.
  */
-const ENTRY_RE =
+const ENTRY_RE_DUES =
   /^(.+?)\s+((?:Rotary\s+)?Mitgliedsbeitrag[^\d]*\d{1,2}\/\d{2}-\d{1,2}\/\d{2})\s+(-?\d{1,3}(?:[.\u00a0]\d{3})*,\d{2})\s*EUR\s*$/;
-/** Generischer Fallback für andere Sammlungs-Typen (kein "Mitgliedsbeitrag"). */
+/** "Rotary <Beschreibung>" als Info-Anker, Name endet beim letzten Whitespace
+ *  davor – matcht z. B. "TICHY DR: GEISERICH Rotary Reise Führungen 120,00 EUR". */
+const ENTRY_RE_ROTARY =
+  /^([\p{L}.:\- ]+?)\s+(Rotary\s+.+?)\s+(-?\d{1,3}(?:[.\u00a0]\d{3})*,\d{2})\s*EUR\s*$/u;
+/**
+ * Generischer Eintrag: <Partner-Name> <Info> <Betrag> EUR.
+ * Erlaubt im Namen alle Buchstaben, Umlaute, Punkte, Bindestriche, Doppelpunkte
+ * und Leerzeichen.
+ */
 const ENTRY_RE_FALLBACK =
-  /^([\p{L}.\- ]+?)\s+(.+?)\s+(-?\d{1,3}(?:[.\u00a0]\d{3})*,\d{2})\s*EUR\s*$/u;
+  /^([\p{L}.:\- ]+?)\s+(.+?)\s+(-?\d{1,3}(?:[.\u00a0]\d{3})*,\d{2})\s*EUR\s*$/u;
 
 /**
  * Parst einen Erste-Bank/George-SEPA-Sammeleinzug-PDF.
@@ -182,7 +193,10 @@ export async function parseSepaPdf(file: File): Promise<SepaParseResult> {
     const l = lines[i].replace(/\s+/g, " ").trim();
     // Header-Zeile "Partner:in Info Betrag" und "Lastschriftsumme" filtern
     if (/^Partner:?in/i.test(l) || /^Lastschriftsumme/i.test(l)) continue;
-    const m = l.match(ENTRY_RE) ?? l.match(ENTRY_RE_FALLBACK);
+    const m =
+      l.match(ENTRY_RE_DUES) ??
+      l.match(ENTRY_RE_ROTARY) ??
+      l.match(ENTRY_RE_FALLBACK);
     if (!m) continue;
     const amount = parseGermanNumber(m[3] ?? "");
     if (!Number.isFinite(amount) || amount === 0) continue;

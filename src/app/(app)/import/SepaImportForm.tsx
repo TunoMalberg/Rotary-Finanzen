@@ -25,6 +25,7 @@ type PreviewEntry = {
 
 type PreviewResp = {
   dryRun: boolean;
+  settledInvoices?: boolean;
   parsed: {
     collectionName: string | null;
     collectionRef: string | null;
@@ -144,10 +145,26 @@ export function SepaImportForm({
         {done && (
           <div
             role="status"
-            className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 flex items-center gap-2"
+            className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 flex items-start gap-2"
           >
-            <CheckCircle2 className="size-4" /> Aufteilung gespeichert &
-            Forderungen ausgeglichen.
+            <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold">Aufteilungen gespeichert.</div>
+              <div className="text-xs mt-0.5">
+                Die Sammelbuchung wurde in {preview?.stats.totalEntries ?? 0}{" "}
+                Einzelbuchungen aufgeteilt. Forderungen sind weiterhin als{" "}
+                <em>offen</em> markiert – auf der Buchungs-Detailseite mit{" "}
+                <strong>„Einzüge vornehmen"</strong> als beglichen markieren.
+              </div>
+              {preview?.aggregateTransaction.id && (
+                <a
+                  href={`/transactions/${preview.aggregateTransaction.id}`}
+                  className="text-xs text-emerald-700 underline mt-1 inline-block"
+                >
+                  → Sammelbuchung öffnen
+                </a>
+              )}
+            </div>
           </div>
         )}
         <div className="flex gap-2 flex-wrap btn-row">
@@ -168,7 +185,7 @@ export function SepaImportForm({
             ) : (
               <Upload className="size-4" />
             )}{" "}
-            Aufteilen & Forderungen ausgleichen
+            Sammelbuchung aufteilen
           </button>
         </div>
       </div>
@@ -206,7 +223,7 @@ export function SepaImportForm({
                 </span>{" "}
                 ·{" "}
                 <span className="font-semibold text-blue-700">
-                  {preview.stats.invoiceMatched} Forderungen ausgeglichen
+                  {preview.stats.invoiceMatched} offene Forderungen verknüpfbar
                 </span>
                 {preview.stats.unmatchedInvoices > 0 && (
                   <>
@@ -230,11 +247,12 @@ export function SepaImportForm({
             <div className="text-xs flex items-start gap-2 text-slate-600 bg-slate-50 border border-slate-200 rounded-md p-2">
               <Info className="size-3.5 shrink-0 mt-0.5 text-blue-600" />
               <div>
-                Beim Bestätigen werden für jeden Eintrag eine{" "}
-                <strong>Aufteilung</strong> auf die Aggregat-Buchung angelegt und
-                offene Forderungen automatisch auf{" "}
-                <code>PAID</code> gesetzt (paidTransactionId zeigt auf die
-                Sammelbuchung).
+                Beim Bestätigen wird für jeden Eintrag eine{" "}
+                <strong>Aufteilung</strong> auf die Aggregat-Buchung angelegt
+                (sichtbar als Einzelbuchung). Forderungen bleiben{" "}
+                <em>offen</em>; die endgültige Begleichung erfolgt manuell auf
+                der Buchungs-Detailseite über{" "}
+                <strong>„Einzüge vornehmen"</strong>.
               </div>
             </div>
 
@@ -244,7 +262,7 @@ export function SepaImportForm({
                   { k: "all", label: `Alle (${preview.preview.length})` },
                   {
                     k: "matched",
-                    label: `Forderung ausgeglichen (${preview.stats.invoiceMatched})`,
+                    label: `Forderung verknüpft (${preview.stats.invoiceMatched})`,
                   },
                   {
                     k: "unmatched",
@@ -336,7 +354,7 @@ export function SepaImportForm({
                       <td data-label="Status">
                         {e.invoice ? (
                           <span className="chip chip-active">
-                            wird ausgeglichen
+                            verknüpfbar
                           </span>
                         ) : e.member ? (
                           <span

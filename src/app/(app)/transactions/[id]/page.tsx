@@ -4,6 +4,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 import { formatEUR } from "@/lib/format";
+import { SettleAllocationsButton } from "./SettleAllocationsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -58,16 +59,47 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
         }}
       />
 
-      {tx.allocations.length > 0 && (
+      {tx.allocations.length > 0 && (() => {
+        const openInvoiceCount = tx.allocations.filter(
+          (a) => a.invoice && a.invoice.status !== "PAID",
+        ).length;
+        const paidCount = tx.allocations.filter(
+          (a) => a.invoice && a.invoice.status === "PAID",
+        ).length;
+        return (
         <section className="mt-8 card-soft overflow-hidden">
-          <div className="px-4 sm:px-5 py-3 border-b">
-            <h2 className="text-base font-semibold">
-              Aufteilung (SEPA-Sammeleinzug)
-            </h2>
-            <p className="text-xs text-slate-500">
-              {tx.allocations.length} Anteile · Summe{" "}
-              {formatEUR(tx.allocations.reduce((a, x) => a + x.amount, 0))}
-            </p>
+          <div className="px-4 sm:px-5 py-3 border-b flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">
+                Aufteilung (SEPA-Sammeleinzug)
+              </h2>
+              <p className="text-xs text-slate-500">
+                {tx.allocations.length} Anteile · Summe{" "}
+                {formatEUR(tx.allocations.reduce((a, x) => a + x.amount, 0))}
+                {openInvoiceCount > 0 && (
+                  <>
+                    {" · "}
+                    <span className="text-amber-700 font-semibold">
+                      {openInvoiceCount} Forderung(en) noch offen
+                    </span>
+                  </>
+                )}
+                {paidCount > 0 && (
+                  <>
+                    {" · "}
+                    <span className="text-emerald-700 font-semibold">
+                      {paidCount} beglichen
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
+            {isTreasurer(session?.user?.role) && (
+              <SettleAllocationsButton
+                transactionId={tx.id}
+                openCount={openInvoiceCount}
+              />
+            )}
           </div>
           <div className="table-stack sm:p-0 p-3">
             <div className="table-scroll max-h-[480px]">
@@ -118,7 +150,8 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </section>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -19,6 +19,10 @@ import { parseSepaPdf, type SepaEntry } from "@/lib/sepaPdfParse";
  *                    aggregierte Buchung anhand Lastschriftsumme + Sammlung-
  *                    Referenz automatisch ermittelt.
  *   - dryRun:        "true" → keine DB-Schreibvorgänge
+ *   - settleInvoices: "true" → Forderungen direkt auf PAID setzen.
+ *     Default ist "false": Aufteilungen werden gespeichert, aber Forderungen
+ *     bleiben offen, bis sie über "Einzüge vornehmen" auf der Buchungs-
+ *     Detailseite manuell ausgeglichen werden.
  *
  * Logik:
  *   1. PDF parsen → Header + Einzeleinträge.
@@ -26,9 +30,10 @@ import { parseSepaPdf, type SepaEntry } from "@/lib/sepaPdfParse";
  *   3. Pro Eintrag Member matchen (lastName, IBAN-Fallback).
  *   4. Pro Eintrag offene Invoice (DUES, OPEN/REMINDED, gleicher Betrag,
  *      Clubjahr der Aggregat-Buchung) suchen.
- *   5. TxAllocation pro Eintrag anlegen, Invoice auf PAID setzen
+ *   5. TxAllocation pro Eintrag anlegen.
+ *   6. Optional (settleInvoices=true): Invoice auf PAID setzen
  *      (paidTransactionId = aggregateTx.id).
- *   6. Aggregat-Buchung erhält Kategorie "Mitgliedsbeitrag" und memberId=null
+ *   7. Aggregat-Buchung erhält Kategorie "Mitgliedsbeitrag" und memberId=null
  *      (die Member-Bezüge laufen jetzt über Allocations).
  */
 export async function POST(req: Request) {
@@ -42,6 +47,7 @@ export async function POST(req: Request) {
   const accountId = String(fd.get("accountId") ?? "");
   const txIdProvided = String(fd.get("transactionId") ?? "");
   const dryRun = String(fd.get("dryRun") ?? "") === "true";
+  const settleInvoices = String(fd.get("settleInvoices") ?? "") === "true";
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "no file" }, { status: 400 });
@@ -350,7 +356,7 @@ export async function POST(req: Request) {
           source: "SEPA_PDF",
         },
       });
-      if (r.invoice) {
+      if (r.invoice && settleInvoices) {
         await tx.invoice.update({
           where: { id: r.invoice.id },
           data: {
@@ -376,6 +382,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     dryRun: false,
+    settledInvoices: settleInvoices,
     parsed: {
       collectionName: parsed.collectionName,
       collectionRef: parsed.collectionRef,

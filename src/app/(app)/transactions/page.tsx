@@ -56,7 +56,19 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const txs = await prisma.transaction.findMany({
     where,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { category: true, account: true, member: true, attachment: true },
+    include: {
+      category: true,
+      account: true,
+      member: true,
+      attachment: true,
+      allocations: {
+        include: {
+          member: { select: { firstName: true, lastName: true } },
+          invoice: { select: { reference: true, status: true } },
+        },
+        orderBy: { partnerName: "asc" },
+      },
+    },
     take: 500,
   });
 
@@ -176,6 +188,15 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           attachmentName: t.attachment?.fileName ?? null,
           attachmentId: t.attachment?.id ?? null,
           balanceAfter: balanceMap.get(t.id) ?? null,
+          allocations: t.allocations.map((a) => ({
+            id: a.id,
+            partnerName: a.partnerName,
+            partnerIban: a.partnerIban,
+            memberName: a.member ? `${a.member.lastName}, ${a.member.firstName}` : null,
+            invoiceRef: a.invoice?.reference ?? null,
+            invoiceStatus: a.invoice?.status ?? null,
+            amount: a.amount,
+          })),
         }))}
         canEdit={isTreasurer}
         // Inline-Edit nur im laufenden, nicht fixierten Clubjahr

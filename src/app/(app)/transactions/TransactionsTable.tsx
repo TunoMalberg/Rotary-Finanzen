@@ -1,10 +1,20 @@
 "use client";
 import { formatDate, formatEUR } from "@/lib/format";
-import { Paperclip, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { InlineSelect, InlineText } from "./InlineEdit";
+
+export type TxAllocationRow = {
+  id: string;
+  partnerName: string | null;
+  partnerIban: string | null;
+  memberName: string | null;
+  invoiceRef: string | null;
+  invoiceStatus: string | null;
+  amount: number;
+};
 
 export type TxRow = {
   id: string;
@@ -24,6 +34,8 @@ export type TxRow = {
   attachmentId: string | null;
   /** Laufender Saldo NACH dieser Buchung (Konto + Clubjahr). */
   balanceAfter: number | null;
+  /** Aufteilungen aus SEPA-Sammeleinzug (leer wenn keine vorhanden). */
+  allocations: TxAllocationRow[];
 };
 
 export type CategoryOption = { id: string; name: string; color: string; kind: string };
@@ -44,7 +56,16 @@ export function TransactionsTable({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
+
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   async function patch(id: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/transactions/${id}`, {
@@ -95,9 +116,31 @@ export function TransactionsTable({
               </tr>
             </thead>
             <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id}>
-                  <td data-label="Datum" className="whitespace-nowrap">{formatDate(t.date)}</td>
+              {transactions.map((t) => {
+                const hasAllocs = t.allocations.length > 0;
+                const isOpen = expanded.has(t.id);
+                return (
+                <Fragment key={t.id}>
+                <tr className={hasAllocs ? "bg-blue-50/30" : ""}>
+                  <td data-label="Datum" className="whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      {hasAllocs ? (
+                        <button
+                          type="button"
+                          onClick={() => toggle(t.id)}
+                          aria-label={isOpen ? "Aufteilung einklappen" : "Aufteilung anzeigen"}
+                          aria-expanded={isOpen}
+                          className="text-blue-700 hover:text-blue-900 -ml-1 p-0.5 rounded hover:bg-blue-100"
+                          title={`${t.allocations.length} Einzelbuchungen`}
+                        >
+                          {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                        </button>
+                      ) : (
+                        <span className="inline-block w-4" />
+                      )}
+                      <span>{formatDate(t.date)}</span>
+                    </div>
+                  </td>
                   <td data-label="Konto">
                     <span className="text-xs text-slate-500">
                       {t.accountType === "MAIN" ? "Haupt" : "GG"}
@@ -182,7 +225,57 @@ export function TransactionsTable({
                     </td>
                   )}
                 </tr>
-              ))}
+                {hasAllocs && !isOpen && (
+                  <tr className="bg-blue-50/20 no-stack-label">
+                    <td />
+                    <td colSpan={canEdit ? 9 : 8} className="text-xs text-blue-800 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggle(t.id)}
+                        className="hover:underline"
+                      >
+                        ↳ {t.allocations.length} Einzelbuchungen
+                        {" · "}Summe {formatEUR(t.allocations.reduce((a, x) => a + x.amount, 0))}
+                        {" · "}<span className="text-blue-600">anzeigen</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {hasAllocs && isOpen && t.allocations.map((a) => (
+                  <tr key={a.id} className="bg-blue-50/40 text-sm no-stack-label">
+                    <td />
+                    <td colSpan={2} className="text-xs text-slate-500 pl-4">
+                      <span className="text-blue-700">↳</span> {a.partnerName ?? "—"}
+                    </td>
+                    <td className="text-slate-600 text-xs">
+                      {a.invoiceRef ? (
+                        <span title={`Forderung ${a.invoiceRef}`}>
+                          <code className="text-[11px]">{a.invoiceRef}</code>{" "}
+                          {a.invoiceStatus === "PAID" ? (
+                            <span className="text-emerald-700 font-medium">✓ beglichen</span>
+                          ) : (
+                            <span className="text-amber-700">{a.invoiceStatus}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">keine Forderung verknüpft</span>
+                      )}
+                    </td>
+                    <td className="text-xs text-slate-400">—</td>
+                    <td className="text-xs text-slate-600">{a.memberName ?? "—"}</td>
+                    <td className="text-xs font-mono text-slate-400">
+                      {a.partnerIban ?? ""}
+                    </td>
+                    <td className="text-right font-mono tabular text-xs amount-pos">
+                      {formatEUR(a.amount)}
+                    </td>
+                    <td />
+                    {canEdit && <td />}
+                  </tr>
+                ))}
+                </Fragment>
+                );
+              })}
               {transactions.length === 0 && (
                 <tr><td colSpan={canEdit ? 10 : 9} className="text-center text-slate-500 py-12 no-stack-label">Keine Buchungen für diese Auswahl.</td></tr>
               )}
