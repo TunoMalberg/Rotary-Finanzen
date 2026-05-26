@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import * as fs from "fs";
 import * as path from "path";
 import { CATEGORY_SEED, autoCategoryName } from "../src/lib/categorize";
+import { parseMemberRoster, statusFromSection } from "../src/lib/memberRosterParse";
 
 const prisma = new PrismaClient();
 
@@ -108,95 +109,79 @@ async function main() {
     },
   });
 
-  // --- Members from MB sheet ---
-  const memberFile = "/workspace/uploads/EAR Rotary Wien Donau 2025-26.xlsx";
-  if (fs.existsSync(memberFile)) {
-    const wb = XLSX.readFile(memberFile);
-    const ws = wb.Sheets["MB"];
-    if (ws) {
-      const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-      // header row at index 8 (0-based)
-      let headerIdx = -1;
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        if (Array.isArray(r) && r.includes("Member ID")) {
-          headerIdx = i;
-          break;
-        }
+  // --- Members ---
+  // Primärquelle: aktuelle ClubRoster.xlsx (im Repo abgelegt).
+  // Fallback: alte EAR-Excel mit "MB"-Sheet, falls noch im Sandbox-Upload.
+  const rosterCandidates = [
+    path.join(process.cwd(), "prisma", "data", "ClubRoster.xlsx"),
+    "/workspace/uploads/ClubRoster.xlsx",
+    "/workspace/uploads/EAR Rotary Wien Donau 2025-26.xlsx",
+  ];
+  const rosterFile = rosterCandidates.find((p) => fs.existsSync(p));
+  if (rosterFile) {
+    console.log(`  • Loading members from ${rosterFile}`);
+    const buf = fs.readFileSync(rosterFile);
+    const parsed = parseMemberRoster(buf);
+    console.log(
+      `    format=${parsed.format}, sheet=${parsed.sheetName}, rows=${parsed.rows.length}`,
+    );
+    for (const row of parsed.rows) {
+      if (!row.lastName) continue;
+      const sectionStatus = statusFromSection(row.section);
+      const isExemptDefault = sectionStatus === "EXEMPT";
+
+      const stamm = {
+        lastName: row.lastName,
+        firstName: row.firstName,
+        address: row.address,
+        city: row.city,
+        postalCode: row.postalCode,
+        country: row.country,
+        phone: row.phone,
+        email: row.email ?? deriveEmail(row.firstName, row.lastName),
+        ...(row.joinedAt ? { joinedAt: row.joinedAt } : {}),
+        status: sectionStatus,
+      };
+      const flagsForUpdate: Record<string, unknown> = {};
+      if (row.paysBySEPA !== null) flagsForUpdate.paysBySEPA = row.paysBySEPA;
+      if (row.isExempt !== null) {
+        flagsForUpdate.isExempt = row.isExempt;
+        flagsForUpdate.duesAmount = row.isExempt ? 0 : 580;
       }
-      if (headerIdx >= 0) {
-        for (let i = headerIdx + 1; i < rows.length; i++) {
-          const r = rows[i] as (string | number | null)[];
-          if (!r) continue;
-          const memberCol = r[2]; // Member ID column
-          const nameRaw = r[3];
-          if (!nameRaw || typeof nameRaw !== "string" || !nameRaw.trim()) continue;
-          const flag1 = r[0]; // 1 = active
-          const flag2 = r[1]; // 'EZ' or '580' or 'Befreit'
-          const address = (r[5] as string) ?? null;
-          const city = (r[6] as string) ?? null;
-          const postal = r[8] != null ? String(r[8]) : null;
-          const country = (r[9] as string) ?? null;
-          const businessPhone = (r[11] as string) ?? null;
-          const residencePhone = (r[12] as string) ?? null;
-          const mobilePhone = (r[13] as string) ?? null;
-          const phone = mobilePhone ?? businessPhone ?? residencePhone ?? null;
+      if (row.notes) flagsForUpdate.notes = row.notes;
 
-          const name = nameRaw.trim();
-          let firstName = "";
-          let lastName = "";
-          if (name.includes(",")) {
-            const [l, f] = name.split(",");
-            lastName = l.trim();
-            firstName = (f ?? "").trim();
-          } else {
-            const parts = name.split(/\s+/);
-            firstName = parts[0] ?? "";
-            lastName = parts.slice(1).join(" ");
-          }
-          if (!lastName) lastName = firstName;
+      const updateData = { ...stamm, ...flagsForUpdate };
+      const createData = {
+        ...stamm,
+        paysBySEPA: row.paysBySEPA ?? false,
+        isExempt: row.isExempt ?? isExemptDefault,
+        duesAmount: (row.isExempt ?? isExemptDefault) ? 0 : 580,
+        ...(row.notes ? { notes: row.notes } : {}),
+      };
 
-          const flag2Str = flag2 ? String(flag2) : "";
-          const paysBySEPA = /\bEZ\b/i.test(flag2Str);
-          const isExempt = /Befreit/i.test(flag2Str);
-          const status = flag1 === 1 || flag1 === "1" ? "ACTIVE" : isExempt ? "EXEMPT" : flag1 ? "ACTIVE" : "ACTIVE";
-          const duesAmount = isExempt ? 0 : 580;
-
-          const data = {
-            lastName,
-            firstName,
-            address,
-            city,
-            postalCode: postal,
-            country,
-            phone,
-            paysBySEPA,
-            isExempt,
-            duesAmount,
-            status,
-            notes: flag2Str.length > 6 ? flag2Str : undefined,
-            email: deriveEmail(firstName, lastName),
-          };
-
-          if (typeof memberCol === "number") {
-            await prisma.member.upsert({
-              where: { rotaryMemberId: memberCol },
-              update: data,
-              create: { rotaryMemberId: memberCol, ...data },
-            });
-          } else {
-            // No rotary id → create only if not exists by name
-            const existing = await prisma.member.findFirst({
-              where: { lastName, firstName },
-            });
-            if (!existing) {
-              await prisma.member.create({ data });
-            }
-          }
+      if (row.rotaryMemberId != null) {
+        await prisma.member.upsert({
+          where: { rotaryMemberId: row.rotaryMemberId },
+          update: updateData,
+          create: { rotaryMemberId: row.rotaryMemberId, ...createData },
+        });
+      } else {
+        const existing = await prisma.member.findFirst({
+          where: { lastName: row.lastName, firstName: row.firstName },
+        });
+        if (existing) {
+          await prisma.member.update({ where: { id: existing.id }, data: updateData });
+        } else {
+          await prisma.member.create({ data: createData });
         }
       }
     }
+  } else {
+    console.warn("  • No member roster file found – skipping member seed.");
   }
+  // Für Transactions-Import unten weiterhin auf alte EAR-Datei verweisen,
+  // wenn vorhanden. Mitglieder-Import kommt jetzt aus ClubRoster (s. o.).
+  const memberFile = "/workspace/uploads/EAR Rotary Wien Donau 2025-26.xlsx";
 
   // --- Transactions for 2025/2026 from "ERSTE Konto" sheet ---
   await importTransactionsFromExcel(memberFile, "ERSTE Konto", cy2526.id, main.id, false);

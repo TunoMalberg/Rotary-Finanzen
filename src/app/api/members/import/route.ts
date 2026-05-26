@@ -2,69 +2,190 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
-import * as XLSX from "xlsx";
+import { parseMemberRoster, statusFromSection } from "@/lib/memberRosterParse";
 
+export const maxDuration = 60;
+
+/**
+ * POST /api/members/import
+ *
+ * Akzeptiert zwei Excel-Formate:
+ *   1) **ClubRoster.xlsx** (neues Rotary-Export-Format, Sheet
+ *      "Mitgliederverzeichnis") – aktuelle Quelle für Adress-Stammdaten.
+ *   2) Altes EAR-Sheet "MB" (Member ID …) – Backwards-Compat.
+ *
+ * Verhalten:
+ *   - Existierende Mitglieder werden anhand `rotaryMemberId` gematcht und
+ *     **nur in den Stammdatenfeldern** (Name, Adresse, Telefon, E-Mail,
+ *     joinedAt) aktualisiert. SEPA- und Befreiungs-Flags werden NICHT
+ *     überschrieben (außer das alte MB-Format liefert sie explizit).
+ *   - Neue Mitglieder werden mit Default-Werten angelegt:
+ *       paysBySEPA=false, isExempt = (section==="Ehrenmitglieder"),
+ *       duesAmount = isExempt ? 0 : 580, status entsprechend Sektion.
+ *   - Mitglieder, die in der Datei NICHT mehr enthalten sind, werden auf
+ *     status="INACTIVE" + leftAt=now gesetzt (sanftes Soft-Off-Boarding,
+ *     keine harte Löschung – wegen FK-Bindung an alte Buchungen/Forderungen).
+ *     Das passiert nur, wenn explizit `?deactivateMissing=1` gesetzt ist.
+ */
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isTreasurer(session?.user?.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const url = new URL(req.url);
+  const deactivateMissing = url.searchParams.get("deactivateMissing") === "1";
+  const dryRun = url.searchParams.get("dryRun") === "1";
+
   const fd = await req.formData();
   const file = fd.get("file");
-  if (!(file instanceof File)) return NextResponse.json({ error: "no file" }, { status: 400 });
-  const buf = Buffer.from(await file.arrayBuffer());
-  const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets["MB"] ?? wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return NextResponse.json({ error: "kein Sheet" }, { status: 400 });
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-
-  let headerIdx = -1;
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (Array.isArray(r) && r.includes("Member ID")) { headerIdx = i; break; }
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "no file" }, { status: 400 });
   }
-  if (headerIdx < 0) return NextResponse.json({ error: "Header 'Member ID' nicht gefunden" }, { status: 400 });
+  const buf = Buffer.from(await file.arrayBuffer());
 
-  let created = 0, updated = 0, skipped = 0;
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const r = rows[i] as (string | number | null)[];
-    if (!r) { skipped++; continue; }
-    const memberCol = r[2];
-    const nameRaw = r[3];
-    if (!nameRaw || typeof nameRaw !== "string" || !nameRaw.trim()) { skipped++; continue; }
-    const flag1 = r[0];
-    const flag2 = r[1];
-    const address = (r[5] as string) ?? null;
-    const city = (r[6] as string) ?? null;
-    const postal = r[8] != null ? String(r[8]) : null;
-    const country = (r[9] as string) ?? "Austria";
-    const phone = (r[13] as string) ?? (r[11] as string) ?? (r[12] as string) ?? null;
-    const name = nameRaw.trim();
-    let firstName = "", lastName = "";
-    if (name.includes(",")) { const [l, f] = name.split(","); lastName = l.trim(); firstName = (f ?? "").trim(); }
-    else { const parts = name.split(/\s+/); firstName = parts[0] ?? ""; lastName = parts.slice(1).join(" "); }
-    if (!lastName) lastName = firstName;
+  const parsed = parseMemberRoster(buf);
+  if (parsed.format === "unknown" || parsed.rows.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Format nicht erkannt. Bitte ClubRoster (Sheet 'Mitgliederverzeichnis') oder altes 'MB'-Sheet hochladen.",
+        format: parsed.format,
+        sheetName: parsed.sheetName,
+      },
+      { status: 400 },
+    );
+  }
 
-    const flag2Str = flag2 ? String(flag2) : "";
-    const paysBySEPA = /\bEZ\b/i.test(flag2Str);
-    const isExempt = /Befreit/i.test(flag2Str);
-    const status = isExempt ? "EXEMPT" : flag1 ? "ACTIVE" : "ACTIVE";
-    const duesAmount = isExempt ? 0 : 580;
+  const seenIds = new Set<number>();
+  const seenLocalIds = new Set<string>();
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  const issues: { row: string; reason: string }[] = [];
 
-    const data = { lastName, firstName, address, city, postalCode: postal, country, phone, paysBySEPA, isExempt, duesAmount, status, notes: flag2Str.length > 6 ? flag2Str : null };
+  for (const row of parsed.rows) {
+    if (!row.lastName) {
+      issues.push({ row: row.firstName ?? "(?)", reason: "kein Nachname" });
+      skipped++;
+      continue;
+    }
 
-    if (typeof memberCol === "number") {
-      const existing = await prisma.member.findUnique({ where: { rotaryMemberId: memberCol } });
+    const sectionStatus = statusFromSection(row.section);
+    const isExemptDefault = sectionStatus === "EXEMPT";
+
+    // Stammdaten-Felder, die immer übernommen werden:
+    const stamm = {
+      lastName: row.lastName,
+      firstName: row.firstName,
+      address: row.address,
+      city: row.city,
+      postalCode: row.postalCode,
+      country: row.country,
+      phone: row.phone,
+      ...(row.email ? { email: row.email } : {}),
+      ...(row.joinedAt ? { joinedAt: row.joinedAt } : {}),
+      status: sectionStatus,
+    };
+
+    // Felder, die nur das alte MB-Format kennt und beim Update nur überschrieben
+    // werden, wenn das Roster sie explizit liefert (sonst: nicht anfassen).
+    const flagsForUpdate: Record<string, unknown> = {};
+    if (row.paysBySEPA !== null) flagsForUpdate.paysBySEPA = row.paysBySEPA;
+    if (row.isExempt !== null) {
+      flagsForUpdate.isExempt = row.isExempt;
+      flagsForUpdate.duesAmount = row.isExempt ? 0 : 580;
+    }
+    if (row.notes) flagsForUpdate.notes = row.notes;
+
+    const updateData = { ...stamm, ...flagsForUpdate };
+
+    // Felder für CREATE (komplett, inkl. defaults):
+    const createData = {
+      ...stamm,
+      paysBySEPA: row.paysBySEPA ?? false,
+      isExempt: row.isExempt ?? isExemptDefault,
+      duesAmount: (row.isExempt ?? isExemptDefault) ? 0 : 580,
+      ...(row.notes ? { notes: row.notes } : {}),
+    };
+
+    if (row.rotaryMemberId != null) {
+      seenIds.add(row.rotaryMemberId);
+      const existing = await prisma.member.findUnique({
+        where: { rotaryMemberId: row.rotaryMemberId },
+        select: { id: true },
+      });
       if (existing) {
-        await prisma.member.update({ where: { rotaryMemberId: memberCol }, data });
+        if (!dryRun) {
+          await prisma.member.update({
+            where: { rotaryMemberId: row.rotaryMemberId },
+            data: updateData,
+          });
+        }
+        seenLocalIds.add(existing.id);
         updated++;
       } else {
-        await prisma.member.create({ data: { rotaryMemberId: memberCol, ...data } });
+        if (!dryRun) {
+          const m = await prisma.member.create({
+            data: { rotaryMemberId: row.rotaryMemberId, ...createData },
+          });
+          seenLocalIds.add(m.id);
+        }
         created++;
       }
     } else {
-      const exist = await prisma.member.findFirst({ where: { lastName, firstName } });
-      if (exist) { await prisma.member.update({ where: { id: exist.id }, data }); updated++; }
-      else { await prisma.member.create({ data }); created++; }
+      // Kein Rotary-ID → match nach Name
+      const existing = await prisma.member.findFirst({
+        where: { lastName: row.lastName, firstName: row.firstName },
+        select: { id: true },
+      });
+      if (existing) {
+        if (!dryRun) {
+          await prisma.member.update({ where: { id: existing.id }, data: updateData });
+        }
+        seenLocalIds.add(existing.id);
+        updated++;
+      } else {
+        if (!dryRun) {
+          const m = await prisma.member.create({ data: createData });
+          seenLocalIds.add(m.id);
+        }
+        created++;
+      }
     }
   }
-  return NextResponse.json({ created, updated, skipped });
+
+  // Optional: Mitglieder soft-deaktivieren, die nicht mehr in der Datei sind.
+  let deactivated = 0;
+  if (deactivateMissing && !dryRun) {
+    const all = await prisma.member.findMany({
+      select: { id: true, rotaryMemberId: true, status: true },
+    });
+    const toDeactivate = all
+      .filter((m) => m.status !== "INACTIVE")
+      .filter(
+        (m) =>
+          !seenLocalIds.has(m.id) &&
+          (m.rotaryMemberId == null || !seenIds.has(m.rotaryMemberId)),
+      )
+      .map((m) => m.id);
+    if (toDeactivate.length > 0) {
+      const res = await prisma.member.updateMany({
+        where: { id: { in: toDeactivate } },
+        data: { status: "INACTIVE", leftAt: new Date() },
+      });
+      deactivated = res.count;
+    }
+  }
+
+  return NextResponse.json({
+    format: parsed.format,
+    sheetName: parsed.sheetName,
+    totalRows: parsed.rows.length,
+    created,
+    updated,
+    skipped,
+    deactivated,
+    issues: issues.slice(0, 50),
+    dryRun,
+  });
 }
