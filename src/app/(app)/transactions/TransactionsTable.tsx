@@ -3,7 +3,8 @@ import { formatDate, formatEUR } from "@/lib/format";
 import { Paperclip, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { InlineSelect, InlineText } from "./InlineEdit";
 
 export type TxRow = {
   id: string;
@@ -15,7 +16,9 @@ export type TxRow = {
   code: string | null;
   amount: number;
   source: string;
+  categoryId: string | null;
   category: { id: string; name: string; color: string } | null;
+  memberId: string | null;
   memberName: string | null;
   attachmentName: string | null;
   attachmentId: string | null;
@@ -23,9 +26,39 @@ export type TxRow = {
   balanceAfter: number | null;
 };
 
-export function TransactionsTable({ transactions, canEdit }: { transactions: TxRow[]; canEdit: boolean }) {
+export type CategoryOption = { id: string; name: string; color: string; kind: string };
+export type MemberOption = { id: string; name: string };
+
+export function TransactionsTable({
+  transactions,
+  canEdit,
+  inlineEditable,
+  categories,
+  members,
+}: {
+  transactions: TxRow[];
+  canEdit: boolean;
+  inlineEditable: boolean;
+  categories: CategoryOption[];
+  members: MemberOption[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  async function patch(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/transactions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error ?? `HTTP ${res.status}`);
+    }
+    // Daten neu laden, damit der Saldo-Lauf etc. konsistent bleibt.
+    startTransition(() => router.refresh());
+  }
 
   async function del(id: string) {
     if (!confirm("Buchung wirklich stornieren?")) return;
@@ -34,6 +67,13 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
     setBusy(null);
     router.refresh();
   }
+
+  const categoryOptions = categories.map((c) => ({
+    value: c.id,
+    label: c.name,
+    color: c.color,
+  }));
+  const memberOptions = members.map((m) => ({ value: m.id, label: m.name }));
 
   return (
     <div className="card-soft overflow-hidden">
@@ -63,16 +103,54 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
                       {t.accountType === "MAIN" ? "Haupt" : "GG"}
                     </span>
                   </td>
-                  <td data-label="Gegenpartei" className="font-medium sm:max-w-[220px] sm:truncate" title={t.counterparty ?? ""}>{t.counterparty ?? "—"}</td>
-                  <td data-label="Zweck" className="text-slate-600 sm:max-w-[260px] sm:truncate" title={t.purpose ?? ""}>{t.purpose ?? "—"}</td>
-                  <td data-label="Kategorie">
-                    {t.category ? (
+                  <td data-label="Gegenpartei" className="font-medium sm:max-w-[220px]">
+                    {inlineEditable ? (
+                      <InlineText
+                        value={t.counterparty}
+                        placeholder="Gegenpartei"
+                        onCommit={(v) => patch(t.id, { counterparty: v })}
+                      />
+                    ) : (
+                      <span className="block sm:truncate" title={t.counterparty ?? ""}>{t.counterparty ?? "—"}</span>
+                    )}
+                  </td>
+                  <td data-label="Zweck" className="text-slate-600 sm:max-w-[260px]">
+                    {inlineEditable ? (
+                      <InlineText
+                        value={t.purpose}
+                        placeholder="Verwendungszweck"
+                        onCommit={(v) => patch(t.id, { purpose: v })}
+                      />
+                    ) : (
+                      <span className="block sm:truncate" title={t.purpose ?? ""}>{t.purpose ?? "—"}</span>
+                    )}
+                  </td>
+                  <td data-label="Kategorie" className="sm:min-w-[180px]">
+                    {inlineEditable ? (
+                      <InlineSelect
+                        value={t.categoryId}
+                        options={categoryOptions}
+                        placeholder="— ohne Kategorie —"
+                        onCommit={(v) => patch(t.id, { categoryId: v })}
+                      />
+                    ) : t.category ? (
                       <span className="chip" style={{ background: `${t.category.color}1A`, color: t.category.color }}>
                         {t.category.name}
                       </span>
                     ) : <span className="text-slate-400 text-xs">—</span>}
                   </td>
-                  <td data-label="Mitglied" className="text-slate-600 text-sm">{t.memberName ?? "—"}</td>
+                  <td data-label="Mitglied" className="text-slate-600 text-sm sm:min-w-[180px]">
+                    {inlineEditable ? (
+                      <InlineSelect
+                        value={t.memberId}
+                        options={memberOptions}
+                        placeholder="— kein Mitglied —"
+                        onCommit={(v) => patch(t.id, { memberId: v })}
+                      />
+                    ) : (
+                      t.memberName ?? "—"
+                    )}
+                  </td>
                   <td data-label="Beleg">
                     {t.attachmentId ? (
                       <a className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1 break-all"
@@ -112,6 +190,11 @@ export function TransactionsTable({ transactions, canEdit }: { transactions: TxR
           </table>
         </div>
       </div>
+      {inlineEditable && (
+        <div className="px-3 sm:px-4 py-2 border-t border-slate-100 text-xs text-slate-500 bg-slate-50/50">
+          Tipp: Felder <span className="font-medium">Gegenpartei</span>, <span className="font-medium">Verwendungszweck</span>, <span className="font-medium">Kategorie</span> und <span className="font-medium">Mitglied</span> können direkt in der Tabelle bearbeitet werden – Änderung wird automatisch gespeichert.
+        </div>
+      )}
     </div>
   );
 }

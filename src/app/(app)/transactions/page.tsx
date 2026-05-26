@@ -19,7 +19,17 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     : await getCurrentClubYear();
   const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
   const accounts = await prisma.account.findMany();
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
+  // Kategorien: globale + Kategorien dieses Clubjahres
+  const categories = await prisma.category.findMany({
+    where: { OR: [{ clubYearId: null }, { clubYearId: cy.id }] },
+    orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+  });
+  // Mitglieder als Pulldown-Quelle
+  const members = await prisma.member.findMany({
+    where: { status: { not: "INACTIVE" } },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    select: { id: true, lastName: true, firstName: true },
+  });
   const accountFilter =
     params.account === "main" ? accounts.find((a) => a.type === "MAIN")
     : params.account === "gg" ? accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST")
@@ -159,13 +169,19 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           code: t.code,
           amount: t.amount,
           source: t.source,
+          categoryId: t.categoryId,
           category: t.category ? { id: t.category.id, name: t.category.name, color: t.category.color } : null,
+          memberId: t.memberId,
           memberName: t.member ? `${t.member.lastName}, ${t.member.firstName}` : null,
           attachmentName: t.attachment?.fileName ?? null,
           attachmentId: t.attachment?.id ?? null,
           balanceAfter: balanceMap.get(t.id) ?? null,
         }))}
         canEdit={isTreasurer}
+        // Inline-Edit nur im laufenden, nicht fixierten Clubjahr
+        inlineEditable={isTreasurer && !cy.lockedAt}
+        categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, kind: c.kind }))}
+        members={members.map((m) => ({ id: m.id, name: `${m.lastName}, ${m.firstName}` }))}
       />
     </div>
   );
