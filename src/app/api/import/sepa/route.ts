@@ -4,6 +4,10 @@ import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { parseSepaPdf, type SepaEntry } from "@/lib/sepaPdfParse";
 
+// Vercel: bei großen Sammeleinzügen (z. B. 67 Aufträge) braucht das Schreiben
+// in Neon mehr Zeit als der Hobby-Default (10 s). Pro-Plan erlaubt bis 60 s.
+export const maxDuration = 60;
+
 /**
  * POST /api/import/sepa
  *
@@ -340,45 +344,55 @@ export async function POST(req: Request) {
   }
 
   // ----- REAL: Allocations + Invoice-PAID -----
-  await prisma.$transaction(async (tx) => {
-    for (let i = 0; i < parsed.entries.length; i++) {
-      const e: SepaEntry = parsed.entries[i];
-      const r = result[i];
-      await tx.txAllocation.create({
-        data: {
-          transactionId: aggregateTx.id,
-          memberId: r.member?.id ?? null,
-          invoiceId: r.invoice?.id ?? null,
-          amount: e.amount,
-          description: e.info,
-          partnerName: e.partnerName,
-          partnerIban: e.partnerIban,
-          source: "SEPA_PDF",
-        },
-      });
-      if (r.invoice && settleInvoices) {
-        await tx.invoice.update({
-          where: { id: r.invoice.id },
+  // Wichtig: bei 60+ Einträgen würden 60+ einzelne `create()`-Calls die
+  // Default-Transaction-Timeout (5 s) sprengen. Wir bauen das Daten-Array
+  // einmal und nutzen `createMany` (1 Roundtrip).
+  const allocationsData = parsed.entries.map((e: SepaEntry, i: number) => ({
+    transactionId: aggregateTx!.id,
+    memberId: result[i].member?.id ?? null,
+    invoiceId: result[i].invoice?.id ?? null,
+    amount: e.amount,
+    description: e.info,
+    partnerName: e.partnerName,
+    partnerIban: e.partnerIban,
+    source: "SEPA_PDF" as const,
+  }));
+  const invoiceIdsToSettle: string[] = settleInvoices
+    ? result.filter((r) => r.invoice).map((r) => r.invoice!.id)
+    : [];
+  const cat = await prisma.category.findFirst({
+    where: { name: "Mitgliedsbeitrag" },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(
+    async (tx) => {
+      // 1 Roundtrip für alle Aufteilungen
+      await tx.txAllocation.createMany({ data: allocationsData });
+      // 1 Roundtrip für alle ggf. zu begleichenden Forderungen
+      if (invoiceIdsToSettle.length > 0) {
+        await tx.invoice.updateMany({
+          where: { id: { in: invoiceIdsToSettle } },
           data: {
             status: "PAID",
-            paidAt: aggregateTx.date,
-            paidTransactionId: aggregateTx.id,
+            paidAt: aggregateTx!.date,
+            paidTransactionId: aggregateTx!.id,
           },
         });
       }
-    }
-    // Aggregat-Buchung markieren: Kategorie "Mitgliedsbeitrag" wenn passend +
-    // memberId leeren (Bezüge laufen jetzt über Allocations).
-    const cat = await tx.category.findFirst({ where: { name: "Mitgliedsbeitrag" } });
-    await tx.transaction.update({
-      where: { id: aggregateTx.id },
-      data: {
-        categoryId: cat?.id ?? aggregateTx.categoryId,
-        memberId: null,
-        isReconciled: true,
-      },
-    });
-  });
+      // Aggregat-Buchung markieren: Kategorie "Mitgliedsbeitrag" wenn passend +
+      // memberId leeren (Bezüge laufen jetzt über Allocations).
+      await tx.transaction.update({
+        where: { id: aggregateTx!.id },
+        data: {
+          categoryId: cat?.id ?? aggregateTx!.categoryId,
+          memberId: null,
+          isReconciled: true,
+        },
+      });
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
 
   return NextResponse.json({
     dryRun: false,

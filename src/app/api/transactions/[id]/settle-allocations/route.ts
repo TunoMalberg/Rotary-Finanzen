@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
 
+// Vercel: bei 60+ Aufteilungen sicherheitshalber bis zu 60 s.
+export const maxDuration = 60;
+
 /**
  * POST /api/transactions/:id/settle-allocations
  *
@@ -36,31 +39,34 @@ export async function POST(
     return NextResponse.json({ error: "Buchung nicht gefunden." }, { status: 404 });
   }
 
-  let settled = 0;
+  // Buckets in Memory, dann ein einziges updateMany.
+  const toSettle: string[] = [];
   let alreadyPaid = 0;
   let withoutInvoice = 0;
-
-  await prisma.$transaction(async (db) => {
-    for (const a of tx.allocations) {
-      if (!a.invoice) {
-        withoutInvoice++;
-        continue;
-      }
-      if (a.invoice.status === "PAID") {
-        alreadyPaid++;
-        continue;
-      }
-      await db.invoice.update({
-        where: { id: a.invoice.id },
-        data: {
-          status: "PAID",
-          paidAt: tx.date,
-          paidTransactionId: tx.id,
-        },
-      });
-      settled++;
+  for (const a of tx.allocations) {
+    if (!a.invoice) {
+      withoutInvoice++;
+      continue;
     }
-  });
+    if (a.invoice.status === "PAID") {
+      alreadyPaid++;
+      continue;
+    }
+    toSettle.push(a.invoice.id);
+  }
+
+  let settled = 0;
+  if (toSettle.length > 0) {
+    const res = await prisma.invoice.updateMany({
+      where: { id: { in: toSettle } },
+      data: {
+        status: "PAID",
+        paidAt: tx.date,
+        paidTransactionId: tx.id,
+      },
+    });
+    settled = res.count;
+  }
 
   return NextResponse.json({
     settled,
