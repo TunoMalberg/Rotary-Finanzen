@@ -294,7 +294,7 @@ model AttendanceList {
   category      Category? @relation(fields: [categoryId], references: [id])
   entries       AttendanceEntry[]
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @default(now()) @updatedAt
 }
 
 model AttendanceEntry {
@@ -314,7 +314,7 @@ model AttendanceEntry {
   invoiceId       String?  @unique
   invoice         Invoice? @relation(fields: [invoiceId], references: [id])
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime @default(now()) @updatedAt
 }
 
 model ArchivedYear {
