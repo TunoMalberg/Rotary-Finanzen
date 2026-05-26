@@ -251,7 +251,10 @@ export async function POST(req: Request) {
       amount: number;
     } | null = null;
     if (matchedMember) {
-      const inv = await prisma.invoice.findFirst({
+      // Match akzeptiert sowohl DUES (Mitgliedsbeiträge) als auch EXPENSE
+      // (Auslagen-Forderungen) – ein Sammeleinzug kann beides enthalten.
+      // Bevorzugt wird DUES, dann EXPENSE.
+      let inv = await prisma.invoice.findFirst({
         where: {
           memberId: matchedMember.id,
           clubYearId: aggregateTx.clubYearId,
@@ -261,6 +264,18 @@ export async function POST(req: Request) {
         },
         select: { id: true, reference: true, status: true, amount: true },
       });
+      if (!inv) {
+        inv = await prisma.invoice.findFirst({
+          where: {
+            memberId: matchedMember.id,
+            clubYearId: aggregateTx.clubYearId,
+            type: "EXPENSE",
+            status: { in: ["OPEN", "REMINDED"] },
+            amount: e.amount,
+          },
+          select: { id: true, reference: true, status: true, amount: true },
+        });
+      }
       if (inv) {
         matchedInvoice = inv;
         invoiceMatched++;

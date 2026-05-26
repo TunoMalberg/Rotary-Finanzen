@@ -72,6 +72,7 @@ model Category {
   clubYear        ClubYear? @relation(fields: [clubYearId], references: [id])
   transactions    Transaction[]
   budgetLines     BudgetLine[]
+  attendanceLists AttendanceList[]
 
   @@unique([clubYearId, name])
 }
@@ -279,24 +280,41 @@ model AttendanceList {
   id            String   @id @default(cuid())
   eventName     String
   eventDate     DateTime
+  /// Optionale Beschreibung (z. B. "Bus + Hotel + Eintritt") – wird in der
+  /// erzeugten Forderungs-Mail mit angegeben.
+  description   String?
   totalCost     Float?
   billPerHead   Float
   paymentMethod String   // SEPA | EMAIL_INVOICE | MIXED
   clubYearId    String
   clubYear      ClubYear @relation(fields: [clubYearId], references: [id])
+  /// Auto-Kategorie pro Auslagenprojekt – Buchungen (z. B. spätere
+  /// Rechnungen) können dem Projekt zugeordnet werden.
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
   entries       AttendanceEntry[]
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model AttendanceEntry {
-  id        String   @id @default(cuid())
-  listId    String
-  list      AttendanceList @relation(fields: [listId], references: [id])
-  memberId  String
-  member    Member   @relation(fields: [memberId], references: [id])
-  amount    Float
-  invoiceId String?  @unique
-  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  id              String   @id @default(cuid())
+  listId          String
+  list            AttendanceList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  memberId        String
+  member          Member   @relation(fields: [memberId], references: [id])
+  /// Anzahl Personen, für die dieses Mitglied bezahlt (z. B. Mitglied bringt
+  /// Familie mit). Forderungsbetrag = personCount × billPerHead, sofern
+  /// nicht durch `amount` manuell überschrieben.
+  personCount     Int      @default(1)
+  amount          Float
+  /// Optionale Methoden-Override pro Zeile (z. B. Liste-Default ist MIXED,
+  /// Zeile bekommt explizit "EMAIL_INVOICE"). NULL = Listen-Default.
+  paymentOverride String?
+  invoiceId       String?  @unique
+  invoice         Invoice? @relation(fields: [invoiceId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model ArchivedYear {

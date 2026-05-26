@@ -12,8 +12,12 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
   const session = await getServerSession(authOptions);
   const canEdit = isTreasurer(session?.user?.role);
 
-  const where: { status?: string; paysBySEPA?: boolean; isExempt?: boolean; OR?: Array<{ lastName?: { contains: string }; firstName?: { contains: string }; email?: { contains: string } }> } = {};
-  if (params.status === "active") where.status = "ACTIVE";
+  const where: { status?: string | { in: string[] }; paysBySEPA?: boolean; isExempt?: boolean; OR?: Array<{ lastName?: { contains: string }; firstName?: { contains: string }; email?: { contains: string } }> } = {};
+  // Default: zeige Mitglieder + Gäste, blende Inaktive aus.
+  if (!params.status) where.status = { in: ["ACTIVE", "NON_MEMBER", "EXEMPT"] };
+  else if (params.status === "active") where.status = "ACTIVE";
+  else if (params.status === "guests") where.status = "NON_MEMBER";
+  else if (params.status === "inactive") where.status = "INACTIVE";
   else if (params.status === "exempt") where.isExempt = true;
   if (params.method === "sepa") where.paysBySEPA = true;
   else if (params.method === "invoice") where.paysBySEPA = false;
@@ -27,10 +31,12 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
     where,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
-  const total = members.length;
-  const sepa = members.filter((m) => m.paysBySEPA).length;
-  const exempt = members.filter((m) => m.isExempt).length;
-  const totalDues = members.reduce((s, m) => s + (m.isExempt ? 0 : m.duesAmount), 0);
+  const realMembers = members.filter((m) => m.status !== "NON_MEMBER");
+  const guests = members.filter((m) => m.status === "NON_MEMBER").length;
+  const total = realMembers.length;
+  const sepa = realMembers.filter((m) => m.paysBySEPA).length;
+  const exempt = realMembers.filter((m) => m.isExempt).length;
+  const totalDues = realMembers.reduce((s, m) => s + (m.isExempt ? 0 : m.duesAmount), 0);
 
   return (
     <div className="space-y-5 fade-up">
@@ -39,7 +45,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
           <h1 className="font-bold flex items-center gap-2">
             <Users className="size-6 text-blue-800 shrink-0" /> Mitglieder
           </h1>
-          <p className="text-slate-500 text-sm">{total} Mitglieder · {sepa} mit EZ · {exempt} befreit</p>
+          <p className="text-slate-500 text-sm">{total} Mitglieder · {sepa} mit EZ · {exempt} befreit{guests > 0 ? ` · ${guests} Gäste` : ""}</p>
         </div>
         {canEdit && (
           <div className="flex gap-2 flex-wrap btn-row w-full sm:w-auto">
@@ -64,9 +70,11 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
         <div>
           <label className="text-xs font-semibold text-slate-600 mb-1 block">Status</label>
           <select className="input" name="status" defaultValue={params.status ?? ""}>
-            <option value="">Alle</option>
+            <option value="">Mitglieder + Gäste</option>
             <option value="active">Aktiv</option>
             <option value="exempt">Befreit</option>
+            <option value="guests">Nur Gäste</option>
+            <option value="inactive">Inaktiv</option>
           </select>
         </div>
         <div>
@@ -121,11 +129,13 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                         : <span className="chip chip-invoice">Rechnung</span>}
                     </td>
                     <td data-label="Status">
-                      {m.isExempt
-                        ? <span className="chip chip-exempt">Befreit</span>
-                        : m.status === "ACTIVE"
-                          ? <span className="chip chip-active">Aktiv</span>
-                          : <span className="chip chip-cancelled">{m.status}</span>}
+                      {m.status === "NON_MEMBER"
+                        ? <span className="chip" style={{ background: "#F3E8FF", color: "#6B21A8" }}>Gast</span>
+                        : m.isExempt
+                          ? <span className="chip chip-exempt">Befreit</span>
+                          : m.status === "ACTIVE"
+                            ? <span className="chip chip-active">Aktiv</span>
+                            : <span className="chip chip-cancelled">{m.status}</span>}
                     </td>
                     <td data-label="Beitrag" className="text-right font-mono tabular">{formatEUR(m.duesAmount)}</td>
                   </tr>

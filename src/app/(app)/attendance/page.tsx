@@ -19,8 +19,8 @@ export default async function AttendancePage() {
     <div className="space-y-5 fade-up">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-bold flex items-center gap-2"><ListChecks className="size-6 text-blue-800 shrink-0" /> Auslagen / Teilnahmelisten</h1>
-          <p className="text-slate-500 text-sm">Veranstaltungen mit Kostenverrechnung an Mitglieder</p>
+          <h1 className="font-bold flex items-center gap-2"><ListChecks className="size-6 text-blue-800 shrink-0" /> Auslagenprojekte</h1>
+          <p className="text-slate-500 text-sm">Veranstaltungen / Ausflüge – Kostenverrechnung an Mitglieder &amp; Gäste</p>
         </div>
         {canEdit && (
           <div className="btn-row w-full sm:w-auto">
@@ -40,7 +40,8 @@ export default async function AttendancePage() {
                 <div className="min-w-0">
                   <div className="text-xs uppercase font-semibold text-amber-600">{l.clubYear.label}</div>
                   <h3 className="font-bold mt-1 break-words">{l.eventName}</h3>
-                  <p className="text-slate-500 text-sm">{formatDate(l.eventDate)} · {l.entries.length} Teilnehmer</p>
+                  {l.description && <p className="text-slate-500 text-xs italic mt-0.5 break-words">{l.description}</p>}
+                  <p className="text-slate-500 text-sm mt-1">{formatDate(l.eventDate)} · {l.entries.length} Teilnehmer</p>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-xl font-bold tabular whitespace-nowrap">{formatEUR(total)}</div>

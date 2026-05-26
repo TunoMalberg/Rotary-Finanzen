@@ -42,7 +42,13 @@ export function MemberEditForm({ member }: { member: {
             <option value="ACTIVE">Aktiv</option>
             <option value="INACTIVE">Inaktiv</option>
             <option value="EXEMPT">Befreit</option>
+            <option value="NON_MEMBER">Gast / Nichtmitglied</option>
           </select>
+          {form.status === "NON_MEMBER" && (
+            <p className="text-[11px] text-purple-700 mt-1">
+              Gast: kein Mitgliedsbeitrag, taucht in Auslagenprojekten auf. Über Status „Aktiv" konvertierbar.
+            </p>
+          )}
         </Field>
         <div className="flex flex-col gap-2 sm:mt-5">
           <label className="text-sm flex items-center gap-2 min-h-[36px]"><input type="checkbox" className="size-5" checked={form.paysBySEPA} onChange={(e) => setForm({ ...form, paysBySEPA: e.target.checked })} /> Einzugsermächtigung</label>

@@ -62,6 +62,7 @@ Login per E-Mail/Passwort (NextAuth Credentials Provider mit bcrypt). Initial-Sc
 | 4b | SEPA-Sammeleinzug aufteilen (PDF) + Auto-Forderungsausgleich | [specs/import-sepa/document.md](import-sepa/document.md) | done |
 | 5 | Mitgliedsbeiträge, Forderungen & Mahnwesen | [specs/dues-dunning/document.md](dues-dunning/document.md) | done |
 | 6 | Auslagen-Verrechnung (Teilnahmelisten) | [specs/expenses-attendance/document.md](expenses-attendance/document.md) | done |
+| 6b | Auslagenprojekte – Erweiterung (Non-Member, personCount, Auto-Kategorie, Edit, Mail/Mahnen) | [specs/expenses-projects-extension/document.md](expenses-projects-extension/document.md) | in-progress |
 | 7 | Budget & Liquiditätsplanung | [specs/budget-cashflow/document.md](budget-cashflow/document.md) | done |
 | 8 | Eingangsrechnungs-Mails / Anhänge | [specs/inbox-attachments/document.md](inbox-attachments/document.md) | done |
 | 9 | Vergleichs-Charts | [specs/charts/document.md](charts/document.md) | done |

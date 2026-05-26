@@ -11,14 +11,23 @@ export default async function NewAttendancePage() {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) redirect("/attendance");
   const cy = await getCurrentClubYear();
-  const members = await prisma.member.findMany({ where: { status: "ACTIVE" }, orderBy: { lastName: "asc" } });
+  // ACTIVE-Mitglieder + Gäste (NON_MEMBER) – Inaktive ausgeblendet.
+  const members = await prisma.member.findMany({
+    where: { status: { in: ["ACTIVE", "NON_MEMBER"] } },
+    orderBy: [{ status: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
+  });
   return (
-    <div className="max-w-3xl fade-up">
-      <h1 className="text-2xl font-bold mb-6">Neue Teilnahmeliste</h1>
+    <div className="max-w-4xl fade-up">
+      <h1 className="text-2xl font-bold mb-6">Neues Auslagenprojekt</h1>
       <NewAttendanceForm
         clubYearId={cy.id}
         clubYearLabel={cy.label}
-        members={members.map((m) => ({ id: m.id, name: `${m.lastName}, ${m.firstName}`, sepa: m.paysBySEPA }))}
+        members={members.map((m) => ({
+          id: m.id,
+          name: `${m.lastName}, ${m.firstName}`,
+          sepa: m.paysBySEPA,
+          isGuest: m.status === "NON_MEMBER",
+        }))}
       />
     </div>
   );
