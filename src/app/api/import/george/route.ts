@@ -2,6 +2,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { parseBankFile } from "@/lib/bankImport";
 import { autoCategoryName, rankCategories } from "@/lib/categorize";
 import { prisma } from "@/lib/prisma";
+import { detectProjectByCode } from "@/lib/projectCategory";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
@@ -119,17 +120,25 @@ async function handle(req: Request) {
 
   // Stammdaten
   // Kategorien: globale (clubYearId=NULL) UND year-spezifische des aktuellen Clubjahrs
-  const [cats, members, projectIds] = await Promise.all([
+  const [cats, members, projectsAll] = await Promise.all([
     prisma.category.findMany({
       where: { OR: [{ clubYearId: null }, { clubYearId }] },
       orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.member.findMany({ select: { id: true, lastName: true } }),
-    prisma.project.findMany({ select: { id: true } }),
+    prisma.project.findMany({
+      select: { id: true, code: true, categoryId: true, isClosed: true },
+    }),
   ]);
   const catByName = new Map(cats.map((c) => [c.name, c.id]));
   const catById = new Map(cats.map((c) => [c.id, c]));
-  const validProjectIds = new Set(projectIds.map((p) => p.id));
+  const validProjectIds = new Set(projectsAll.map((p) => p.id));
+  // Aktive Projekte für Code-Auto-Zuordnung (geschlossene Projekte triggern
+  // keine neuen Auto-Zuordnungen, historische Buchungen bleiben aber zugeordnet).
+  const activeProjects = projectsAll.filter((p) => !p.isClosed);
+  const projectCategoryById = new Map(
+    projectsAll.filter((p) => p.categoryId).map((p) => [p.id, p.categoryId!]),
+  );
 
   // ImportBatch (nur in echten Imports)
   let batchId: string | null = null;
@@ -315,14 +324,28 @@ async function handle(req: Request) {
       continue;
     }
 
-    // Auto-Kategorisierung + Top-Vorschläge
+    // 1) Projekt-Code-Match: prüft Verwendungszweck/Gegenpartei auf den Code
+    //    eines aktiven Projekts. Wenn ein Match vorliegt, ergibt sich daraus
+    //    direkt die zuzuordnende Kategorie (Auto-Kategorie des Projekts).
+    const projectByCode = detectProjectByCode(
+      { purpose, counterparty, code: r.partnerIban },
+      activeProjects,
+    );
+    const autoProjectId = projectByCode?.id ?? null;
+    const autoProjectCategoryId = autoProjectId
+      ? projectCategoryById.get(autoProjectId) ?? null
+      : null;
+
+    // 2) Auto-Kategorisierung über Schlüsselwörter (Fallback, wenn kein
+    //    Projekt-Code im Verwendungszweck steht).
     const cat = autoCategoryName({
       purpose,
       counterparty,
       code: r.partnerIban,
       amount: r.amount,
     });
-    const autoCategoryId = cat ? (catByName.get(cat.name) ?? null) : null;
+    const autoCategoryId =
+      autoProjectCategoryId ?? (cat ? catByName.get(cat.name) ?? null : null);
     const ranked = rankCategories(
       cats.map((c) => ({
         id: c.id,
@@ -351,6 +374,14 @@ async function handle(req: Request) {
     // Falls die zugewiesene Kategorie nicht (mehr) existiert → ignorieren.
     if (finalCategoryId && !catById.has(finalCategoryId)) finalCategoryId = null;
     let finalProjectId = normalize(userOverride?.projectId);
+    // User-Override hat Vorrang; sonst Auto-Projekt aus Code-Match.
+    if (
+      !userOverride ||
+      !("projectId" in userOverride) ||
+      userOverride.projectId === undefined
+    ) {
+      finalProjectId = autoProjectId;
+    }
     if (finalProjectId && !validProjectIds.has(finalProjectId))
       finalProjectId = null;
     const finalCategoryName = finalCategoryId

@@ -11,6 +11,7 @@ import {
   Download,
 } from "lucide-react";
 import { AssignButton, EditButton, PrintButton } from "./ProjectDetailClient";
+import { RescanButton } from "./RescanButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,10 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const project = await prisma.project.findUnique({ where: { id } });
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: { category: { select: { id: true, name: true, color: true } } },
+  });
   if (!project) notFound();
 
   const txs = await prisma.transaction.findMany({
@@ -99,9 +103,27 @@ export default async function ProjectDetailPage({
               {project.endDate ? formatDate(project.endDate) : "…"}
             </p>
           )}
+          {project.category && (
+            <p className="text-xs text-slate-500 mt-1">
+              Auto-Kategorie:{" "}
+              <span
+                className="chip"
+                style={{
+                  background: `${project.category.color}1A`,
+                  color: project.category.color,
+                }}
+              >
+                {project.category.name}
+              </span>{" "}
+              · Bank-Buchungen mit{" "}
+              <code className="font-mono">{project.code}</code> im
+              Verwendungszweck werden automatisch hierhin zugeordnet.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap btn-row">
           <AssignButton projectId={project.id} projectName={project.name} />
+          <RescanButton projectId={project.id} projectCode={project.code} />
           <EditButton project={{
             id: project.id,
             code: project.code,
