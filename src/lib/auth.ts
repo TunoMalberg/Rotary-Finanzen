@@ -48,8 +48,26 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-export type Role = "treasurer" | "president" | "admin";
+export type Role = "treasurer" | "president" | "admin" | "auditor";
 
+/**
+ * Schreib-Rechte (Buchungen anlegen/ändern, SEPA-Import, Mitglieder pflegen).
+ * Auditor (Rechnungsprüfer) bekommt diese Rechte ebenfalls, weil er Belege
+ * an Buchungen anhängen und Mails zuordnen können soll.
+ */
 export function isTreasurer(role?: string | null) {
-  return role === "treasurer" || role === "admin";
+  return role === "treasurer" || role === "admin" || role === "auditor";
+}
+
+/**
+ * Lesezugriff auf alle finanziellen Daten – aktuell für alle eingeloggten
+ * User mit bekannter Rolle (Schatzmeister/Präsident/Admin/Prüfer).
+ */
+export function canRead(role?: string | null) {
+  return (
+    role === "treasurer" ||
+    role === "admin" ||
+    role === "president" ||
+    role === "auditor"
+  );
 }

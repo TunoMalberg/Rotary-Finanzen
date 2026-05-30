@@ -1,21 +1,29 @@
 import { prisma } from "@/lib/prisma";
 import { TxForm } from "../TxForm";
-import { authOptions, isTreasurer } from "@/lib/auth";
+import { authOptions, isTreasurer, canRead } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 import { formatEUR } from "@/lib/format";
 import { SettleAllocationsButton } from "./SettleAllocationsButton";
+import { AttachmentsPanel, type AttachmentItem } from "./AttachmentsPanel";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditTxPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getServerSession(authOptions);
-  if (!isTreasurer(session?.user?.role)) redirect("/transactions");
+  if (!canRead(session?.user?.role)) redirect("/login");
+  const canEdit = isTreasurer(session?.user?.role);
   const tx = await prisma.transaction.findUnique({
     where: { id },
     include: {
       attachment: true,
+      attachmentLinks: {
+        include: {
+          attachment: { include: { mailInbox: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
       allocations: {
         include: {
           member: { select: { id: true, lastName: true, firstName: true } },
@@ -34,29 +42,72 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
     orderBy: [{ isClosed: "asc" }, { sortOrder: "asc" }, { code: "asc" }],
   });
 
+  // Belege zusammenstellen: M:N-Links + Legacy-1:1-Attachment.
+  const attachmentItems: AttachmentItem[] = tx.attachmentLinks.map((l) => ({
+    id: l.attachment.id,
+    fileName: l.attachment.fileName,
+    mimeType: l.attachment.mimeType,
+    sizeBytes: l.attachment.sizeBytes,
+    kind: l.attachment.kind,
+    uploadedAt: l.attachment.uploadedAt.toISOString(),
+    source: l.source as AttachmentItem["source"],
+    mailInbox: l.attachment.mailInbox
+      ? {
+          id: l.attachment.mailInbox.id,
+          fromAddress: l.attachment.mailInbox.fromAddress,
+          fromName: l.attachment.mailInbox.fromName,
+          subject: l.attachment.mailInbox.subject,
+          receivedAt: l.attachment.mailInbox.receivedAt.toISOString(),
+        }
+      : null,
+  }));
+  // Legacy-Attachment ergänzen, falls vorhanden und nicht schon über Links da
+  if (tx.attachment && !attachmentItems.some((a) => a.id === tx.attachment!.id)) {
+    attachmentItems.unshift({
+      id: tx.attachment.id,
+      fileName: tx.attachment.fileName,
+      mimeType: tx.attachment.mimeType,
+      sizeBytes: tx.attachment.sizeBytes,
+      kind: tx.attachment.kind,
+      uploadedAt: tx.attachment.uploadedAt.toISOString(),
+      source: "LEGACY",
+      mailInbox: null,
+    });
+  }
+
   return (
-    <div className="max-w-3xl fade-up">
-      <h1 className="text-2xl font-bold mb-6">Buchung bearbeiten</h1>
-      <TxForm
-        clubYears={allYears.map((y) => ({ id: y.id, label: y.label }))}
-        accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
-        categories={categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind }))}
-        members={members.map((m) => ({ id: m.id, name: `${m.lastName}, ${m.firstName}` }))}
-        projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
-        initial={{
-          id: tx.id,
-          clubYearId: tx.clubYearId,
-          accountId: tx.accountId,
-          date: tx.date.toISOString(),
-          counterparty: tx.counterparty,
-          purpose: tx.purpose,
-          note: tx.note,
-          amount: tx.amount,
-          categoryId: tx.categoryId,
-          memberId: tx.memberId,
-          projectId: tx.projectId,
-          attachmentId: tx.attachmentId,
-        }}
+    <div className="max-w-3xl fade-up space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold mb-6">
+          Buchung {canEdit ? "bearbeiten" : "ansehen"}
+        </h1>
+        <TxForm
+          clubYears={allYears.map((y) => ({ id: y.id, label: y.label }))}
+          accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
+          categories={categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind }))}
+          members={members.map((m) => ({ id: m.id, name: `${m.lastName}, ${m.firstName}` }))}
+          projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
+          initial={{
+            id: tx.id,
+            clubYearId: tx.clubYearId,
+            accountId: tx.accountId,
+            date: tx.date.toISOString(),
+            counterparty: tx.counterparty,
+            purpose: tx.purpose,
+            note: tx.note,
+            amount: tx.amount,
+            categoryId: tx.categoryId,
+            memberId: tx.memberId,
+            projectId: tx.projectId,
+            attachmentId: tx.attachmentId,
+          }}
+        />
+      </div>
+
+      <AttachmentsPanel
+        transactionId={tx.id}
+        initial={attachmentItems}
+        canEdit={canEdit}
       />
 
       {tx.allocations.length > 0 && (() => {
@@ -67,7 +118,7 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
           (a) => a.invoice && a.invoice.status === "PAID",
         ).length;
         return (
-        <section className="mt-8 card-soft overflow-hidden">
+        <section className="card-soft overflow-hidden">
           <div className="px-4 sm:px-5 py-3 border-b flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">
@@ -94,7 +145,7 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
                 )}
               </p>
             </div>
-            {isTreasurer(session?.user?.role) && (
+            {canEdit && (
               <SettleAllocationsButton
                 transactionId={tx.id}
                 openCount={openInvoiceCount}

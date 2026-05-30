@@ -125,11 +125,85 @@ model Attachment {
   fileName     String
   mimeType     String
   sizeBytes    Int
+  /// Vercel-Blob-URL (oder S3-Key, je nach Storage-Adapter).
   storagePath  String
   kind         String   @default("OTHER") // INVOICE | RECEIPT | EMAIL | OTHER
   uploadedById String?
   uploadedAt   DateTime @default(now())
+  /// Wenn der Beleg aus einer eingehenden Mail stammt (Postmark-Webhook),
+  /// zeigt dies auf den Mail-Datensatz. Dadurch sieht der Prüfer die
+  /// Original-Mail (Sender, Betreff, Body, Header).
+  mailInboxId  String?
+  mailInbox    MailInbox? @relation(fields: [mailInboxId], references: [id])
+  /// Legacy-1:1-Relation auf Transaction (wird beim Lesen weiterhin
+  /// berücksichtigt, neue Belege gehen über `TransactionAttachment`).
   transactions Transaction[]
+  /// M:N Beleg ↔ Buchung (eine Buchung kann mehrere Belege haben,
+  /// ein Beleg-PDF kann theoretisch auch mehreren Buchungen anhängen).
+  txLinks      TransactionAttachment[]
+
+  @@index([mailInboxId])
+}
+
+/// Verknüpfung Transaction ↔ Attachment (Many-to-Many) – ersetzt die
+/// alte 1:1-Relation `Transaction.attachmentId`. Legacy-Daten dürfen weiter
+/// die alte Spalte verwenden; neue Belege werden hier eingetragen.
+model TransactionAttachment {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  attachmentId  String
+  attachment    Attachment  @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  /// Quelle der Verknüpfung (manuell hochgeladen, vom Mail-Webhook
+  /// automatisch zugeordnet, …).
+  source        String      @default("UPLOAD") // UPLOAD | MAIL_AUTO | MAIL_MANUAL
+  /// Wer hat den Beleg verknüpft (UserId).
+  linkedById    String?
+  createdAt     DateTime    @default(now())
+
+  @@unique([transactionId, attachmentId])
+  @@index([attachmentId])
+}
+
+/// Posteingang für weitergeleitete Rechnungs-Mails (Postmark-Inbound).
+/// Eine MailInbox-Zeile entspricht **einer** eingegangenen Mail; sie kann
+/// mehrere Anhänge haben (Attachment.mailInboxId) und ggf. einer Buchung
+/// zugeordnet sein.
+model MailInbox {
+  id              String       @id @default(cuid())
+  /// Quelle (POSTMARK | UPLOAD | …).
+  source          String       @default("POSTMARK")
+  /// Absenderadresse (z. B. "rechnung@lieferant.at").
+  fromAddress     String
+  fromName        String?
+  /// To-Adresse (Postmarks Inbound-Adresse, z. B.
+  /// "<hash>@inbound.postmarkapp.com").
+  toAddress       String?
+  subject         String?
+  receivedAt      DateTime     @default(now())
+  textBody        String?
+  htmlBody        String?
+  /// RFC-5322 Message-ID, wird zum Deduplizieren genutzt.
+  messageId       String?      @unique
+  /// Status der Zuordnung.
+  status          String       @default("UNMATCHED") // UNMATCHED | MATCHED | DISMISSED
+  matchedTxId     String?
+  matchedTx       Transaction? @relation("MailMatchedTx", fields: [matchedTxId], references: [id])
+  matchedAt       DateTime?
+  matchedById     String?
+  /// Auto-Match-Konfidenz 0..1, falls von Heuristik gesetzt.
+  matchConfidence Float?
+  /// Aus Anhängen extrahierter Brutto-Betrag (für Match).
+  extractedAmount Float?
+  /// Aus Anhängen extrahierte Lieferanten-IBAN.
+  extractedIban   String?
+  /// Aus Anhängen extrahierte Rechnungs-Nr.
+  extractedInvNo  String?
+  attachments     Attachment[]
+  createdAt       DateTime     @default(now())
+
+  @@index([status])
+  @@index([matchedTxId])
 }
 
 model Transaction {
@@ -158,7 +232,9 @@ model Transaction {
   isReconciled  Boolean     @default(false)
   attachmentId  String?
   attachment    Attachment? @relation(fields: [attachmentId], references: [id])
+  attachmentLinks TransactionAttachment[]
   invoicesPaid  Invoice[]   @relation("PaidByTx")
+  matchedMails  MailInbox[] @relation("MailMatchedTx")
   allocations   TxAllocation[]
   createdById   String?
   createdAt     DateTime    @default(now())

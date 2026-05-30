@@ -42,6 +42,7 @@ export function UsersAdmin({ users: initial }: { users: U[] }) {
         <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
           <option value="president">Präsident (Read-only)</option>
           <option value="treasurer">Schatzmeister (Vollzugriff)</option>
+          <option value="auditor">Rechnungsprüfer (Vollzugriff inkl. Belege)</option>
           <option value="admin">Admin</option>
         </select>
         <input className="input" type="password" autoComplete="new-password" placeholder="Initial-Passwort (min. 8)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />

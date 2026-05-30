@@ -3,6 +3,7 @@ import {
   Archive,
   Banknote,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -42,6 +43,7 @@ const NAV: readonly NavItem[] = [
     icon: Upload,
     treasurerOnly: true,
   },
+  { href: "/belege", label: "Belege-Eingang", icon: Inbox },
   { href: "/members", label: "Mitglieder", icon: Users },
   { href: "/dues", label: "Beiträge & Mahnungen", icon: Mail },
   {
