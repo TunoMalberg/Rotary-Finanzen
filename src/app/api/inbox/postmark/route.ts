@@ -106,6 +106,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
+  // ------- Hauptverarbeitung (mit Try/Catch für saubere Fehlerdiagnose) -------
+  try {
+    return await processInbound(body);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("[postmark] 500 –", msg, stack);
+
+    // Hinweistext für die häufigsten Fehler ableiten
+    let hint = "Siehe Vercel Function Logs.";
+    if (/MailInbox|TransactionAttachment|column .* does not exist|relation .* does not exist/i.test(msg)) {
+      hint =
+        "DB-Schema fehlt. Bitte `prisma db push` gegen die Neon-Production-DB ausführen, damit Tabellen MailInbox/TransactionAttachment + neue Attachment-Spalten angelegt werden.";
+    } else if (/BLOB_READ_WRITE_TOKEN|@vercel\/blob|blob/i.test(msg)) {
+      hint =
+        "Vercel Blob-Storage ist nicht aktiviert. In Vercel → Storage → Blob → Create Store → Project verbinden, dann Redeploy. Setzt BLOB_READ_WRITE_TOKEN automatisch.";
+    } else if (/EROFS|read-only|EACCES/i.test(msg)) {
+      hint =
+        "Versuch in das Read-Only-Filesystem von Vercel zu schreiben (lokaler Blob-Fallback aktiv). Vercel Blob aktivieren.";
+    }
+    return NextResponse.json(
+      { error: "internal", message: msg, hint, stack },
+      { status: 500 },
+    );
+  }
+}
+
+async function processInbound(body: PostmarkInboundPayload) {
   const messageId = body.MessageID ?? null;
   if (messageId) {
     const dup = await prisma.mailInbox.findUnique({ where: { messageId } });
