@@ -31,13 +31,13 @@ export type ParsedRow = {
 
 export type ParseResult = {
   rows: ParsedRow[];
-  source: "csv" | "xlsx";
-  /** Originale Header-Zeile, hilft bei Diagnose/Fehlern */
+  source: "csv" | "xlsx" | "json";
+  /** Originale Header-Zeile / JSON-Keys (Diagnose). */
   headers: string[];
-  /** Effektive Spalten-Zuordnung (für UI-Feedback). */
+  /** Effektive Spalten-Zuordnung (nur für CSV/XLSX, sonst Default). */
   mapping: HeaderMapping;
   /** Wie wurde die Zuordnung gefunden? */
-  mappingSource: "heuristic" | "ai" | "mixed";
+  mappingSource: "heuristic" | "ai" | "mixed" | "json-schema";
 };
 
 /** Wie wir Header auf unsere normalisierten Felder mappen. */
@@ -197,21 +197,138 @@ function rowsFromCsv(text: string): { rows: string[][]; headers: string[] } {
   };
 }
 
+/* ----------------------------- JSON-Parser ----------------------------- */
+
+/** Form eines George-/Erste-JSON-Eintrags (relevante Subset-Felder). */
+type GeorgeJsonEntry = {
+  transactionId?: string;
+  booking?: string;
+  execution?: string;
+  valuation?: string;
+  partnerName?: string | null;
+  partnerAccount?: { iban?: string | null } | null;
+  amount?: { value?: number; precision?: number; currency?: string } | null;
+  amountSender?: { value?: number; precision?: number; currency?: string } | null;
+  reference?: string | null;
+  referenceNumber?: string | null;
+  note?: string | null;
+  statementInvoice?: string | null;
+};
+
+/**
+ * Parst einen George-JSON-Export (Array von Buchungs-Objekten).
+ * Direktes Schema-Mapping: keine Heuristik nötig, Beträge als
+ * `{value: -74600, precision: 2}` → 74600 / 100 = -746.
+ */
+function parseGeorgeJson(text: string): { rows: ParsedRow[]; keys: string[] } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(
+      `JSON konnte nicht geparst werden: ${e instanceof Error ? e.message : "Unbekannter Fehler"}`,
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("JSON-Datei muss ein Array von Buchungen sein (George-Export-Format).");
+  }
+  const arr = parsed as GeorgeJsonEntry[];
+  if (arr.length === 0) {
+    throw new Error("JSON-Array ist leer.");
+  }
+
+  // Schnelle Schema-Validierung am ersten Eintrag
+  const first = arr[0] as Record<string, unknown>;
+  const keys = Object.keys(first);
+  if (
+    !("booking" in first) &&
+    !("execution" in first) &&
+    !("valuation" in first)
+  ) {
+    throw new Error(
+      `JSON-Schema sieht nicht nach einem George-Export aus. Gefundene Top-Level-Keys: ${keys.slice(0, 12).join(", ")}`,
+    );
+  }
+  if (!("amount" in first) && !("amountSender" in first)) {
+    throw new Error(
+      `JSON-Schema fehlt 'amount' oder 'amountSender'. Gefundene Keys: ${keys.slice(0, 12).join(", ")}`,
+    );
+  }
+
+  const rows: ParsedRow[] = [];
+  for (const e of arr) {
+    // Datum: booking ist Buchungsdatum, valuation ist Valuta
+    const booking = e.booking ?? e.execution ?? e.valuation;
+    if (!booking) continue;
+    const date = parseAnyDate(booking);
+    if (!date) continue;
+
+    // Betrag: value/10^precision
+    const a = e.amount ?? e.amountSender;
+    if (!a || typeof a.value !== "number") continue;
+    const precision = typeof a.precision === "number" ? a.precision : 2;
+    const amount = a.value / Math.pow(10, precision);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    const currency = (a.currency ?? "EUR").toUpperCase();
+
+    rows.push({
+      date,
+      valueDate: e.valuation ? parseAnyDate(e.valuation) : null,
+      counterparty: e.partnerName?.trim() || null,
+      purpose: e.reference?.trim() || e.note?.trim() || null,
+      amount,
+      currency,
+      externalRef: e.referenceNumber?.trim() || e.transactionId?.trim() || null,
+      partnerIban: e.partnerAccount?.iban?.trim() || null,
+      statementRef: e.statementInvoice?.trim() || null,
+    });
+  }
+  return { rows, keys };
+}
+
 /* ----------------------------- Hauptfunktion ----------------------------- */
 
 /**
- * Erkennt CSV vs. XLSX anhand Dateiname-Endung & MIME, parst und mappt
+ * Erkennt CSV / XLSX / JSON anhand Dateiname-Endung & MIME, parst und mappt
  * auf normalisierte ParsedRow[].
  */
 export async function parseBankFile(file: File): Promise<ParseResult> {
   const name = file.name.toLowerCase();
-  const isXlsx = /\.xlsx?$/i.test(name) ||
+  const isXlsx =
+    /\.xlsx?$/i.test(name) ||
     file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     file.type === "application/vnd.ms-excel";
+  const isJson = /\.json$/i.test(name) || file.type === "application/json";
+
+  // ---- JSON-Pfad: direktes Schema-Mapping, keine Header-Heuristik nötig ----
+  if (isJson) {
+    const text = await file.text();
+    const { rows, keys } = parseGeorgeJson(text);
+    return {
+      rows,
+      source: "json",
+      headers: keys,
+      mapping: {
+        date: -1,
+        valueDate: -1,
+        amount: -1,
+        amountIn: -1,
+        amountOut: -1,
+        currency: -1,
+        purpose: -1,
+        counterparty: -1,
+        partnerIban: -1,
+        externalRef: -1,
+        statementRef: -1,
+        paymentRef: -1,
+      },
+      mappingSource: "json-schema",
+    };
+  }
 
   let rawRows: unknown[][];
   let headers: string[];
-  let source: "csv" | "xlsx";
+  let source: "csv" | "xlsx" | "json";
 
   if (isXlsx) {
     const buf = await file.arrayBuffer();

@@ -41,7 +41,7 @@ type PreviewRow = {
 };
 
 type PreviewResp = {
-  source: "csv" | "xlsx";
+  source: "csv" | "xlsx" | "json";
   totalRows: number;
   created: number;
   duplicates: number;
@@ -174,14 +174,19 @@ export function ImportForm({
 
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">
-            Bank-Datei (George Erste Bank, CSV oder XLSX)
+            Bank-Datei (George Erste Bank: JSON empfohlen, alternativ XLSX/CSV)
           </label>
           <input
             type="file"
-            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            accept=".json,.csv,.xlsx,.xls,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="input"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
+          <p className="mt-1 text-xs text-slate-500">
+            <strong>Tipp:</strong> In George „Umsätze exportieren" → Format{" "}
+            <strong>JSON</strong> wählen. Beträge sind dann exakt (kein
+            Zahlen-Parsing) und alle Felder strukturiert verfügbar.
+          </p>
           {file && (
             <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
               <FileSpreadsheet className="size-3.5" />
