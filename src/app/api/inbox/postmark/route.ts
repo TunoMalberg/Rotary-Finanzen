@@ -32,20 +32,54 @@ export async function POST(req: Request) {
   // ------- Auth -------
   const expectedUser = process.env.POSTMARK_INBOUND_USER;
   const expectedPass = process.env.POSTMARK_INBOUND_PASSWORD;
-  if (!expectedUser || !expectedPass) {
-    console.error("[postmark] missing POSTMARK_INBOUND_USER/PASSWORD");
+  const tokenEnv = process.env.POSTMARK_INBOUND_TOKEN; // optional: ?token=… als Alternative
+  const url = new URL(req.url);
+  const tokenQuery = url.searchParams.get("token");
+
+  if (!expectedUser && !expectedPass && !tokenEnv) {
+    console.error("[postmark] no auth configured (set POSTMARK_INBOUND_USER+PASSWORD or POSTMARK_INBOUND_TOKEN)");
     return NextResponse.json({ error: "not configured" }, { status: 503 });
   }
+
   const auth = req.headers.get("authorization") ?? "";
-  const m = auth.match(/^Basic\s+(.+)$/);
-  if (!m) return NextResponse.json({ error: "auth" }, { status: 401 });
-  const decoded = Buffer.from(m[1], "base64").toString("utf-8");
-  const idx = decoded.indexOf(":");
-  if (idx < 0) return NextResponse.json({ error: "auth" }, { status: 401 });
-  const user = decoded.slice(0, idx);
-  const pass = decoded.slice(idx + 1);
-  if (user !== expectedUser || pass !== expectedPass) {
-    return NextResponse.json({ error: "auth" }, { status: 401 });
+  let authOk = false;
+  let authReason = "no-credentials";
+
+  // Variante 1: Token via Query (?token=…) – funktioniert auch bei URL-Redirects
+  if (tokenEnv && tokenQuery && tokenQuery === tokenEnv) {
+    authOk = true;
+  }
+  // Variante 2: HTTP Basic
+  else if (auth) {
+    const m = auth.match(/^Basic\s+(.+)$/i);
+    if (!m) {
+      authReason = "header-not-basic";
+    } else {
+      try {
+        const decoded = Buffer.from(m[1], "base64").toString("utf-8");
+        const idx = decoded.indexOf(":");
+        if (idx < 0) {
+          authReason = "decoded-no-colon";
+        } else {
+          const user = decoded.slice(0, idx);
+          const pass = decoded.slice(idx + 1);
+          if (expectedUser && expectedPass && user === expectedUser && pass === expectedPass) {
+            authOk = true;
+          } else {
+            authReason = `creds-mismatch (got user='${user}', len(pass)=${pass.length}; expected user='${expectedUser ?? ""}', len(pass)=${(expectedPass ?? "").length})`;
+          }
+        }
+      } catch (e) {
+        authReason = `decode-error: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+  } else {
+    authReason = "no-authorization-header";
+  }
+
+  if (!authOk) {
+    console.error(`[postmark] 401 – ${authReason}; url=${req.url}`);
+    return NextResponse.json({ error: "auth", reason: authReason }, { status: 401 });
   }
 
   // ------- Payload -------
