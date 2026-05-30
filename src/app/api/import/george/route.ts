@@ -102,10 +102,16 @@ async function handle(req: Request) {
     );
   }
 
-  const { rows, source, headers } = parseResult;
+  const { rows, source, headers, mapping, mappingSource } = parseResult;
   if (rows.length === 0) {
     return NextResponse.json(
-      { error: "Keine importierbaren Zeilen gefunden.", headers, source },
+      {
+        error: "Keine importierbaren Zeilen gefunden.",
+        headers,
+        source,
+        mapping,
+        mappingSource,
+      },
       { status: 400 },
     );
   }
@@ -469,6 +475,9 @@ async function handle(req: Request) {
 
   return NextResponse.json({
     source,
+    headers,
+    mapping,
+    mappingSource,
     totalRows: rows.length,
     created,
     duplicates,

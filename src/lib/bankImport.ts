@@ -34,6 +34,28 @@ export type ParseResult = {
   source: "csv" | "xlsx";
   /** Originale Header-Zeile, hilft bei Diagnose/Fehlern */
   headers: string[];
+  /** Effektive Spalten-Zuordnung (für UI-Feedback). */
+  mapping: HeaderMapping;
+  /** Wie wurde die Zuordnung gefunden? */
+  mappingSource: "heuristic" | "ai" | "mixed";
+};
+
+/** Wie wir Header auf unsere normalisierten Felder mappen. */
+export type HeaderMapping = {
+  /** Index der Spalte mit dem Buchungsdatum. */
+  date: number;
+  valueDate: number;
+  /** Genau einer von amount ODER (amountIn + amountOut) ist > -1. */
+  amount: number;
+  amountIn: number;
+  amountOut: number;
+  currency: number;
+  purpose: number;
+  counterparty: number;
+  partnerIban: number;
+  externalRef: number;
+  statementRef: number;
+  paymentRef: number;
 };
 
 /* ----------------------------- Utilities ----------------------------- */
@@ -122,16 +144,36 @@ function rowsFromXlsx(buf: ArrayBuffer): { rows: unknown[][]; headerIdx: number;
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) throw new Error("XLSX enthält keine Tabellen.");
   const all = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
-  // Suche die Header-Zeile: enthält "Buchungsdatum" oder "Datum"
+  // Suche die Header-Zeile: enthält "Buchungsdatum"/"Datum"/"Buchungstag"
+  // ODER eine Zeile mit ≥ 5 nicht-leeren String-Zellen, die typische Bank-Header-Wörter
+  // enthält (Betrag/IBAN/Verwendungszweck/Empfänger/Eingehender/Ausgehender). Damit fangen
+  // wir auch Exporte ab, die "Datum" anders nennen oder leichte Abwandlungen.
   let headerIdx = -1;
-  for (let i = 0; i < Math.min(all.length, 30); i++) {
+  const HEADER_HINTS = /betrag|iban|empf[aä]nger|auftraggeber|verwendung|partner|buchung|valuta|w[aä]hrung|eingehend|ausgehend|kontoauszug|referenz|datum/i;
+  for (let i = 0; i < Math.min(all.length, 50); i++) {
     const r = all[i] ?? [];
-    if (r.some((c) => typeof c === "string" && /^buchungsdatum$|^datum$|^buchungstag$/i.test(c.trim()))) {
+    const strCells = r.filter((c) => typeof c === "string" && c.trim().length > 0) as string[];
+    const hasDateHeader = strCells.some((c) =>
+      /^(buchungsdatum|datum|buchungstag)$/i.test(c.trim()),
+    );
+    const looksLikeHeader =
+      strCells.length >= 5 &&
+      strCells.filter((c) => HEADER_HINTS.test(c)).length >= 3;
+    if (hasDateHeader || looksLikeHeader) {
       headerIdx = i;
       break;
     }
   }
-  if (headerIdx < 0) throw new Error("Header-Zeile (Buchungsdatum/Datum) nicht gefunden.");
+  if (headerIdx < 0)
+    throw new Error(
+      "Header-Zeile (Buchungsdatum/Datum) nicht gefunden – ist die Datei korrekt? Erste 5 Zeilen: " +
+        all
+          .slice(0, 5)
+          .map((r, i) =>
+            `Z${i}: ${(r ?? []).slice(0, 6).map((c) => (c == null ? "" : String(c).slice(0, 30))).join(" | ")}`,
+          )
+          .join("  ‖  "),
+    );
   const headers = (all[headerIdx] as unknown[]).map((c) => (c == null ? "" : String(c).trim()));
   return { rows: all.slice(headerIdx + 1), headerIdx, headers };
 }
@@ -185,45 +227,69 @@ export async function parseBankFile(file: File): Promise<ParseResult> {
     source = "csv";
   }
 
-  // Spalten-Indizes (tolerant)
-  const dateIdx = findIdx(headers, ["Buchungsdatum", "Buchungstag", "Datum", "Datum Buchung", "Buchung"]);
-  const valueIdx = findIdx(headers, ["Durchführungsdatum", "Durchfuehrungsdatum", "Valutadatum", "Valuta", "Wertstellung"]);
-  const amountIdx = findIdx(headers, ["Betrag", "Umsatz", "Wert"]);
-  const currencyIdx = findIdx(headers, ["Währung", "Waehrung", "Currency"]);
-  const purposeIdx = findIdx(headers, [
-    "Buchungs-Details", "BuchungsDetails", "Verwendungszweck", "Buchungstext", "Text",
-  ]);
-  const counterpartyIdx = findIdx(headers, [
-    "Partner Name", "Partnername", "Auftraggeber", "Empfänger", "Empfaenger",
-    "Begünstigter", "Beguenstigter", "Gegenpartei",
-    "Empfänger/Auftraggeber", "Auftraggeber/Empfänger",
-  ]);
-  const ibanIdx = findIdx(headers, ["Partner IBAN", "PartnerIBAN", "IBAN", "Gegenkonto", "Konto Empfänger"]);
-  const refIdx = findIdx(headers, ["Buchungsreferenz", "BuchungsReferenz", "Transaktionsreferenz", "Referenz"]);
-  const stmtIdx = findIdx(headers, ["Kontoauszug / Rechnung", "KontoauszugRechnung", "Kontoauszug"]);
-  // Zahlungsreferenz als Fallback-Verwendungszweck
-  const payRefIdx = findIdx(headers, ["Zahlungsreferenz", "PaymentReference"]);
+  // Heuristische Spalten-Zuordnung
+  let mapping: HeaderMapping = detectMappingHeuristic(headers);
+  let mappingSource: "heuristic" | "ai" | "mixed" = "heuristic";
 
-  if (dateIdx < 0 || amountIdx < 0) {
-    throw new Error(`Spalten 'Buchungsdatum' und 'Betrag' nicht gefunden. Erkannte Header: ${headers.join(", ")}`);
+  // Wenn essenzielle Felder fehlen → KI-Fallback (falls OPENAI_API_KEY gesetzt)
+  if (mapping.date < 0 || (mapping.amount < 0 && mapping.amountIn < 0 && mapping.amountOut < 0)) {
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const ai = await detectMappingWithAI(headers, rawRows.slice(0, 3));
+        // Merge: AI füllt nur die Lücken
+        const merged: HeaderMapping = { ...mapping };
+        for (const k of Object.keys(merged) as (keyof HeaderMapping)[]) {
+          if (merged[k] < 0 && ai[k] >= 0) merged[k] = ai[k];
+        }
+        mapping = merged;
+        mappingSource = "mixed";
+      } catch (e) {
+        // KI nicht verfügbar → wir fallen unten in den deterministischen Fehler
+        console.warn("[bankImport] AI mapping failed:", e);
+      }
+    }
+  }
+
+  if (
+    mapping.date < 0 ||
+    (mapping.amount < 0 && mapping.amountIn < 0 && mapping.amountOut < 0)
+  ) {
+    throw new Error(
+      `Spalten 'Buchungsdatum' und 'Betrag' (oder 'Eingehender Betrag'/'Ausgehender Betrag') nicht gefunden. Erkannte Header: ${headers.filter((h) => h && h.trim()).join(" | ")}`,
+    );
   }
 
   const parsed: ParsedRow[] = [];
   for (const r of rawRows) {
     if (!r || r.every((c) => c == null || (typeof c === "string" && !c.trim()))) continue;
-    const date = parseAnyDate(r[dateIdx]);
-    const amount = parseAnyNumber(r[amountIdx]);
-    if (!date || amount === 0) continue;
+    const date = parseAnyDate(r[mapping.date]);
+    if (!date) continue;
 
-    const valueDate = valueIdx >= 0 ? parseAnyDate(r[valueIdx]) : null;
-    const purposeMain = purposeIdx >= 0 ? String(r[purposeIdx] ?? "").trim() : "";
-    const purposeFallback = payRefIdx >= 0 ? String(r[payRefIdx] ?? "").trim() : "";
+    // Betrag bestimmen:
+    //  1. Vorzugsfeld: Eingehender + Ausgehender (in der Praxis ist immer nur eins gefüllt)
+    //  2. Sonst Single-Betrag (alte CSV / Originalbetrag)
+    let amount = 0;
+    if (mapping.amountIn >= 0 || mapping.amountOut >= 0) {
+      const inV = mapping.amountIn >= 0 ? parseAnyNumber(r[mapping.amountIn]) : 0;
+      const outV = mapping.amountOut >= 0 ? parseAnyNumber(r[mapping.amountOut]) : 0;
+      // Outgoing ist meist schon negativ; falls jemand absolute Werte schickt, machen wir's negativ.
+      const outSigned = outV > 0 ? -outV : outV;
+      amount = inV !== 0 ? inV : outSigned;
+    } else if (mapping.amount >= 0) {
+      amount = parseAnyNumber(r[mapping.amount]);
+    }
+    if (amount === 0) continue;
+
+    const valueDate = mapping.valueDate >= 0 ? parseAnyDate(r[mapping.valueDate]) : null;
+    const purposeMain = mapping.purpose >= 0 ? String(r[mapping.purpose] ?? "").trim() : "";
+    const purposeFallback = mapping.paymentRef >= 0 ? String(r[mapping.paymentRef] ?? "").trim() : "";
     const purpose = purposeMain || purposeFallback || null;
-    const counterparty = counterpartyIdx >= 0 ? (String(r[counterpartyIdx] ?? "").trim() || null) : null;
-    const currency = (currencyIdx >= 0 ? String(r[currencyIdx] ?? "").trim() : "EUR").toUpperCase() || "EUR";
-    const externalRef = refIdx >= 0 ? (String(r[refIdx] ?? "").trim() || null) : null;
-    const partnerIban = ibanIdx >= 0 ? (String(r[ibanIdx] ?? "").trim() || null) : null;
-    const statementRef = stmtIdx >= 0 ? (String(r[stmtIdx] ?? "").trim() || null) : null;
+    const counterparty = mapping.counterparty >= 0 ? String(r[mapping.counterparty] ?? "").trim() || null : null;
+    const currency =
+      (mapping.currency >= 0 ? String(r[mapping.currency] ?? "").trim() : "EUR").toUpperCase() || "EUR";
+    const externalRef = mapping.externalRef >= 0 ? String(r[mapping.externalRef] ?? "").trim() || null : null;
+    const partnerIban = mapping.partnerIban >= 0 ? String(r[mapping.partnerIban] ?? "").trim() || null : null;
+    const statementRef = mapping.statementRef >= 0 ? String(r[mapping.statementRef] ?? "").trim() || null : null;
 
     parsed.push({
       date,
@@ -238,5 +304,183 @@ export async function parseBankFile(file: File): Promise<ParseResult> {
     });
   }
 
-  return { rows: parsed, source, headers };
+  return { rows: parsed, source, headers, mapping, mappingSource };
+}
+
+/* ------------------------ Heuristische Header-Erkennung ------------------------ */
+
+function detectMappingHeuristic(headers: string[]): HeaderMapping {
+  return {
+    date: findIdx(headers, [
+      "Buchungsdatum",
+      "Buchungstag",
+      "Datum",
+      "Datum Buchung",
+      "Buchung",
+    ]),
+    valueDate: findIdx(headers, [
+      "Durchführungsdatum",
+      "Durchfuehrungsdatum",
+      "Valutadatum",
+      "Valuta",
+      "Wertstellung",
+    ]),
+    // single-amount Spalten (ältere George-CSVs / Originalbetrag)
+    amount: findIdx(headers, ["Betrag", "Umsatz", "Wert", "Originalbetrag"]),
+    // neue George XLSX-Spalten (separat)
+    amountIn: findIdx(headers, [
+      "Eingehender Betrag",
+      "Eingang",
+      "Haben",
+      "Gutschrift",
+      "Credit",
+    ]),
+    amountOut: findIdx(headers, [
+      "Ausgehender Betrag",
+      "Ausgang",
+      "Soll",
+      "Belastung",
+      "Lastschrift",
+      "Debit",
+    ]),
+    currency: findIdx(headers, ["Währung", "Waehrung", "Currency", "Originalwährung"]),
+    purpose: findIdx(headers, [
+      "Buchungs-Details",
+      "BuchungsDetails",
+      "Verwendungszweck",
+      "Buchungstext",
+      "Text",
+      "Beschreibung",
+    ]),
+    counterparty: findIdx(headers, [
+      "Partner Name",
+      "Partnername",
+      "Auftraggeber",
+      "Empfänger",
+      "Empfaenger",
+      "Begünstigter",
+      "Beguenstigter",
+      "Gegenpartei",
+      "Empfänger/Auftraggeber",
+      "Auftraggeber/Empfänger",
+      "Name",
+    ]),
+    partnerIban: findIdx(headers, [
+      "Partner IBAN",
+      "PartnerIBAN",
+      "IBAN",
+      "Gegenkonto",
+      "Konto Empfänger",
+    ]),
+    externalRef: findIdx(headers, [
+      "Buchungsreferenz",
+      "BuchungsReferenz",
+      "Transaktionsreferenz",
+      "Referenz",
+      "(Sammel-) Überweisung ID",
+      "Sammel-Überweisung ID",
+      "Überweisung ID",
+    ]),
+    statementRef: findIdx(headers, [
+      "Kontoauszug / Rechnung",
+      "KontoauszugRechnung",
+      "Kontoauszug",
+      "Auszug",
+    ]),
+    paymentRef: findIdx(headers, [
+      "Zahlungsreferenz",
+      "PaymentReference",
+      "Notiz",
+    ]),
+  };
+}
+
+/* ------------------------------- KI-Fallback ------------------------------- */
+
+/**
+ * Fragt OpenAI, welche Header auf unsere Felder gemappt werden sollen.
+ * Wird nur aufgerufen, wenn die heuristische Erkennung essenzielle Felder
+ * NICHT findet. Erfordert `OPENAI_API_KEY` als ENV-Variable.
+ *
+ * Liefert Indizes (-1 wenn nicht gefunden).
+ */
+async function detectMappingWithAI(
+  headers: string[],
+  sampleRows: unknown[][],
+): Promise<HeaderMapping> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY nicht gesetzt");
+
+  const sample = sampleRows.slice(0, 3).map((row) =>
+    row.slice(0, headers.length).map((cell) => {
+      if (cell == null) return "";
+      const s = String(cell);
+      return s.length > 40 ? s.slice(0, 37) + "…" : s;
+    }),
+  );
+
+  const prompt = `Du erhältst die Kopfzeile eines deutschsprachigen Bank-Kontoauszug-Exports (z. B. von der österreichischen Bank "George"/Erste Bank) und 1-3 Beispielzeilen. Du sollst jeder unserer Zielspalten den passenden Header-Index zuordnen (0-basiert) oder -1 wenn nicht vorhanden.
+
+Zielspalten (deutsch, Erklärung):
+- date          : Buchungsdatum
+- valueDate     : Valutadatum/Wertstellung/Durchführungsdatum
+- amount        : signierter Betrag (positiv=Gutschrift, negativ=Lastschrift) – nur falls EINE Spalte
+- amountIn      : Eingehender Betrag (Gutschrift, separat)
+- amountOut     : Ausgehender Betrag (Lastschrift, separat) – meist bereits negativ
+- currency      : Währungs-Code (EUR/USD)
+- purpose       : Verwendungszweck/Buchungs-Details
+- counterparty  : Name des Partners (Empfänger/Auftraggeber)
+- partnerIban   : IBAN des Partners
+- externalRef   : eindeutige Buchungsreferenz der Bank
+- statementRef  : Kontoauszug-/Rechnungsnummer
+- paymentRef    : Zahlungsreferenz/Notiz (Fallback-Zweck)
+
+Header (mit Index):
+${headers.map((h, i) => `${i}: ${h}`).join("\n")}
+
+Beispielzeilen (gleiche Spalten-Reihenfolge):
+${sample.map((r, i) => `Zeile ${i + 1}: ${r.join(" | ")}`).join("\n")}
+
+Antworte AUSSCHLIEßLICH mit einem JSON-Objekt der Form:
+{"date":4,"valueDate":-1,"amount":-1,"amountIn":23,"amountOut":24,"currency":13,"purpose":20,"counterparty":8,"partnerIban":9,"externalRef":21,"statementRef":7,"paymentRef":31}`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MAPPING_MODEL ?? "gpt-4o-mini",
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`OpenAI ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const json = (await res.json()) as { choices: { message: { content: string } }[] };
+  const content = json.choices?.[0]?.message?.content ?? "{}";
+  const parsed = JSON.parse(content) as Partial<HeaderMapping>;
+
+  const safe = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 && n < headers.length ? n : -1;
+  };
+  return {
+    date: safe(parsed.date),
+    valueDate: safe(parsed.valueDate),
+    amount: safe(parsed.amount),
+    amountIn: safe(parsed.amountIn),
+    amountOut: safe(parsed.amountOut),
+    currency: safe(parsed.currency),
+    purpose: safe(parsed.purpose),
+    counterparty: safe(parsed.counterparty),
+    partnerIban: safe(parsed.partnerIban),
+    externalRef: safe(parsed.externalRef),
+    statementRef: safe(parsed.statementRef),
+    paymentRef: safe(parsed.paymentRef),
+  };
 }
