@@ -30,15 +30,25 @@ export const maxDuration = 60;
  */
 export async function POST(req: Request) {
   // ------- Auth -------
-  const expectedUser = process.env.POSTMARK_INBOUND_USER;
-  const expectedPass = process.env.POSTMARK_INBOUND_PASSWORD;
-  const tokenEnv = process.env.POSTMARK_INBOUND_TOKEN; // optional: ?token=… als Alternative
+  const expectedUser = (process.env.POSTMARK_INBOUND_USER ?? "").trim();
+  const expectedPass = (process.env.POSTMARK_INBOUND_PASSWORD ?? "").trim();
+  const tokenEnv = (process.env.POSTMARK_INBOUND_TOKEN ?? "").trim();
   const url = new URL(req.url);
-  const tokenQuery = url.searchParams.get("token");
+  const tokenQuery = (url.searchParams.get("token") ?? "").trim();
+
+  // Diagnose-Endpoint: GET liefert (ohne Secrets) zurück, was konfiguriert ist
+  // → erlaubt schnelles Debuggen via Browser
+  // (für POST irrelevant; Postmark ruft immer mit POST auf)
 
   if (!expectedUser && !expectedPass && !tokenEnv) {
-    console.error("[postmark] no auth configured (set POSTMARK_INBOUND_USER+PASSWORD or POSTMARK_INBOUND_TOKEN)");
-    return NextResponse.json({ error: "not configured" }, { status: 503 });
+    console.error("[postmark] 503 – no auth configured (set POSTMARK_INBOUND_USER+PASSWORD or POSTMARK_INBOUND_TOKEN in Vercel + Redeploy)");
+    return NextResponse.json(
+      {
+        error: "not configured",
+        hint: "Set POSTMARK_INBOUND_TOKEN in Vercel → Settings → Environment Variables (Production) and redeploy.",
+      },
+      { status: 503 },
+    );
   }
 
   const auth = req.headers.get("authorization") ?? "";
@@ -46,8 +56,14 @@ export async function POST(req: Request) {
   let authReason = "no-credentials";
 
   // Variante 1: Token via Query (?token=…) – funktioniert auch bei URL-Redirects
-  if (tokenEnv && tokenQuery && tokenQuery === tokenEnv) {
-    authOk = true;
+  if (tokenQuery) {
+    if (tokenEnv && tokenQuery === tokenEnv) {
+      authOk = true;
+    } else if (!tokenEnv) {
+      authReason = "token-given-but-POSTMARK_INBOUND_TOKEN-env-not-set";
+    } else {
+      authReason = `token-mismatch (got len=${tokenQuery.length}, expected len=${tokenEnv.length})`;
+    }
   }
   // Variante 2: HTTP Basic
   else if (auth) {
@@ -66,7 +82,7 @@ export async function POST(req: Request) {
           if (expectedUser && expectedPass && user === expectedUser && pass === expectedPass) {
             authOk = true;
           } else {
-            authReason = `creds-mismatch (got user='${user}', len(pass)=${pass.length}; expected user='${expectedUser ?? ""}', len(pass)=${(expectedPass ?? "").length})`;
+            authReason = `basic-creds-mismatch (got user='${user}', len(pass)=${pass.length}; expected user='${expectedUser}', len(pass)=${expectedPass.length})`;
           }
         }
       } catch (e) {
@@ -74,11 +90,11 @@ export async function POST(req: Request) {
       }
     }
   } else {
-    authReason = "no-authorization-header";
+    authReason = "no-authorization-header-and-no-token-query";
   }
 
   if (!authOk) {
-    console.error(`[postmark] 401 – ${authReason}; url=${req.url}`);
+    console.error(`[postmark] 401 – ${authReason}; url=${req.url}; tokenEnv-set=${!!tokenEnv} tokenEnv-len=${tokenEnv.length} userEnv-set=${!!expectedUser} passEnv-set=${!!expectedPass}`);
     return NextResponse.json({ error: "auth", reason: authReason }, { status: 401 });
   }
 
@@ -226,6 +242,42 @@ export async function POST(req: Request) {
       ? { transactionId: auto.transactionId, score: auto.score, reasons: auto.reasons }
       : null,
     candidates: candidates.slice(0, 3),
+  });
+}
+
+/**
+ * GET /api/inbox/postmark
+ *
+ * Diagnose-Endpoint (KEINE Secrets!). Zeigt nur, OB ENVs gesetzt sind und
+ * ob der ?token=… mit dem ENV-Wert übereinstimmt – ohne Werte preiszugeben.
+ */
+export function GET(req: Request) {
+  const url = new URL(req.url);
+  const tokenQuery = (url.searchParams.get("token") ?? "").trim();
+  const tokenEnv = (process.env.POSTMARK_INBOUND_TOKEN ?? "").trim();
+  const userEnv = (process.env.POSTMARK_INBOUND_USER ?? "").trim();
+  const passEnv = (process.env.POSTMARK_INBOUND_PASSWORD ?? "").trim();
+  return NextResponse.json({
+    ok: true,
+    env: {
+      POSTMARK_INBOUND_TOKEN_set: !!tokenEnv,
+      POSTMARK_INBOUND_TOKEN_len: tokenEnv.length,
+      POSTMARK_INBOUND_USER_set: !!userEnv,
+      POSTMARK_INBOUND_PASSWORD_set: !!passEnv,
+    },
+    request: {
+      tokenQuery_given: !!tokenQuery,
+      tokenQuery_len: tokenQuery.length,
+      tokenQuery_matches_env: !!tokenEnv && tokenQuery === tokenEnv,
+    },
+    hint:
+      tokenEnv && tokenQuery && tokenQuery !== tokenEnv
+        ? `Token-Query (${tokenQuery.length} chars) ≠ ENV-Wert (${tokenEnv.length} chars). Whitespace? Andere Schreibweise?`
+        : !tokenEnv
+          ? "POSTMARK_INBOUND_TOKEN ist nicht gesetzt (oder leer). Vercel → Settings → ENV hinzufügen + Production anhaken + Redeploy."
+          : tokenEnv && tokenQuery && tokenQuery === tokenEnv
+            ? "✅ Auth würde durchgehen."
+            : "Kein Token in Query – ruf mit ?token=… auf um zu testen.",
   });
 }
 
