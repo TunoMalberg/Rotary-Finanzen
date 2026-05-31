@@ -6,6 +6,8 @@ import { buildTreasurerExcel } from "@/lib/treasurerReport/excel";
 import { buildTreasurerPptx } from "@/lib/treasurerReport/pptx";
 import { buildTreasurerPdf } from "@/lib/treasurerReport/pdf";
 
+// pdfkit benötigt Node.js (nicht Edge) wegen fs / __dirname
+export const runtime = "nodejs";
 // PDF-Generierung kann je nach Buchungs-Volumen länger dauern
 export const maxDuration = 60;
 // Hot-Reload + große Buffer: kein Caching

@@ -7,7 +7,20 @@ const nextConfig = {
     : '.next',
   // pdfjs-serverless lädt sein PDF-Modul zur Laufzeit – nicht durch den
   // Bundler ziehen, sondern aus node_modules laden lassen.
-  serverExternalPackages: ['pdfjs-serverless', 'pdfjs-dist'],
+  // pdfkit muss ebenfalls extern bleiben, damit seine AFM-Font-Dateien
+  // (js/data/*.afm) zur Laufzeit gefunden werden statt vom Webpack-Bundler
+  // verschluckt zu werden (führt sonst zu ENOENT Helvetica.afm auf Vercel).
+  serverExternalPackages: ['pdfjs-serverless', 'pdfjs-dist', 'pdfkit', 'fontkit'],
+  // Vercel/Next-Tracer in den AFM-Datenpfad zwingen, damit die Lambda-Bundles
+  // die pdfkit-Schrift-Metriken enthalten.
+  outputFileTracingIncludes: {
+    '/api/reports/treasurer': [
+      './node_modules/pdfkit/js/data/**/*',
+    ],
+    '/api/reports/treasurer/route': [
+      './node_modules/pdfkit/js/data/**/*',
+    ],
+  },
   // Enable CORS for Design Mode to load resources cross-origin (dev only)
   // Note: Do NOT set allowedDevOrigins - the default allows all origins in dev mode
   async headers() {
