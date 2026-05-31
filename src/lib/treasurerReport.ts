@@ -35,6 +35,43 @@ export type SollIst = {
   delta: number; // actual - budget (signed)
 };
 
+/**
+ * Detaillierte Projekt-Abrechnung: Liste aller Buchungen eines Clubprojekts
+ * inklusive laufendem Saldo. Wird im Schatzmeister-Bericht pro aktivem
+ * Projekt ausgewiesen.
+ *
+ * Hinweis: Buchungen werden über die gesamte Projekt-Lebensdauer aggregiert
+ * (nicht nur Buchungen im aktuellen Clubjahr), damit die Abrechnung
+ * konsistent mit dem CSV-Export pro Projekt bleibt.
+ */
+export type ProjectStatementRow = {
+  date: Date;
+  accountName: string;
+  clubYearLabel: string;
+  counterparty: string | null;
+  purpose: string | null;
+  categoryName: string | null;
+  memberName: string | null;
+  amount: number;
+  runningBalance: number;
+};
+
+export type ProjectStatement = {
+  projectId: string;
+  code: string;
+  name: string;
+  color: string;
+  description: string | null;
+  isClosed: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  income: number;
+  expense: number; // negative
+  balance: number;
+  count: number;
+  rows: ProjectStatementRow[];
+};
+
 export type OpenInvoice = {
   id: string;
   reference: string;
@@ -80,8 +117,13 @@ export type TreasurerReport = {
   // Buchungen
   transactions: TxRow[];
   transactionsCount: number;
-  // Projekte
+  // Projekte (Übersicht)
   projects: ProjectTotal[];
+  /**
+   * Detaillierte Abrechnungen pro Clubprojekt mit allen Buchungen
+   * (alle Clubjahre). Nur Projekte mit mindestens einer Buchung.
+   */
+  projectStatements: ProjectStatement[];
   // Forderungen
   openDues: OpenInvoice[];
   openOtherInvoices: OpenInvoice[];
@@ -183,6 +225,60 @@ export async function collectTreasurerReport(opts: {
   // Projekte (kompletter Verlauf)
   const projects = await getProjectTotals();
 
+  // Pro Projekt eine Detail-Abrechnung – alle Buchungen über die gesamte
+  // Projektlaufzeit, mit laufendem Saldo. Identische Logik wie der CSV-Export
+  // unter /api/projects/:id/export.
+  const projectsWithBookings = projects.filter((p) => p.count > 0);
+  const projectStatementTxs =
+    projectsWithBookings.length === 0
+      ? []
+      : await prisma.transaction.findMany({
+          where: {
+            projectId: { in: projectsWithBookings.map((p) => p.id) },
+            deletedAt: null,
+          },
+          orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+          include: {
+            account: { select: { name: true } },
+            category: { select: { name: true } },
+            member: { select: { firstName: true, lastName: true } },
+            clubYear: { select: { label: true } },
+          },
+        });
+  const projectStatements: ProjectStatement[] = projectsWithBookings.map((p) => {
+    const items = projectStatementTxs.filter((t) => t.projectId === p.id);
+    let run = 0;
+    const rows: ProjectStatementRow[] = items.map((t) => {
+      run += t.amount;
+      return {
+        date: t.date,
+        accountName: t.account.name,
+        clubYearLabel: t.clubYear.label,
+        counterparty: t.counterparty,
+        purpose: t.purpose,
+        categoryName: t.category?.name ?? null,
+        memberName: t.member ? `${t.member.firstName} ${t.member.lastName}`.trim() : null,
+        amount: t.amount,
+        runningBalance: run,
+      };
+    });
+    return {
+      projectId: p.id,
+      code: p.code,
+      name: p.name,
+      color: p.color,
+      description: p.description,
+      isClosed: p.isClosed,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      income: p.income,
+      expense: p.expense,
+      balance: p.balance,
+      count: p.count,
+      rows,
+    };
+  });
+
   // Offene Forderungen (Mitgliedsbeiträge)
   const today = new Date(asOf);
   const today00 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -259,6 +355,7 @@ export async function collectTreasurerReport(opts: {
     transactions,
     transactionsCount: transactions.length,
     projects,
+    projectStatements,
     openDues,
     openOtherInvoices,
     expenseReimbursements,

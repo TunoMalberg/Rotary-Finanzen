@@ -7,6 +7,7 @@
  *  3. Soll-Ist (Bar-Chart)
  *  4. Einnahmen/Ausgaben Verteilung (Donut)
  *  5. Clubprojekte (Tabelle)
+ *  5a. Pro Clubprojekt: Detail-Abrechnung (Tabelle der Buchungen)
  *  6. Offene Mitgliedsbeiträge
  *  7. Auslagenbericht
  *  8. Buchungs-Übersicht (Top + Verweis auf Excel)
@@ -298,6 +299,133 @@ export async function buildTreasurerPptx(report: TreasurerReport): Promise<Buffe
     });
   }
 
+  /* ====================== 5a. Detail-Abrechnungen pro Projekt ====================== */
+  for (const stmt of report.projectStatements) {
+    const s = pres.addSlide({ masterName: "ROTARY" });
+    addTitle(
+      s,
+      `Projekt-Abrechnung: ${stmt.code} – ${truncate(stmt.name, 60)}`,
+      stmt.description ? truncate(stmt.description, 120) : undefined,
+    );
+
+    // KPI-Box
+    const kpiY = 1.25;
+    const drawKpi = (xOff: number, label: string, val: string, color: string) => {
+      s.addShape(pres.ShapeType.rect, {
+        x: 0.4 + xOff,
+        y: kpiY,
+        w: 3.0,
+        h: 0.65,
+        fill: { color: "F1F5F9" },
+        line: { color: "E2E8F0", width: 0.5 },
+      });
+      s.addText(label, {
+        x: 0.5 + xOff,
+        y: kpiY + 0.04,
+        w: 2.8,
+        h: 0.22,
+        fontFace: "Calibri",
+        fontSize: 9,
+        color: SLATE,
+      });
+      s.addText(val, {
+        x: 0.5 + xOff,
+        y: kpiY + 0.26,
+        w: 2.8,
+        h: 0.36,
+        fontFace: "Calibri",
+        fontSize: 16,
+        bold: true,
+        color,
+      });
+    };
+    drawKpi(0, "Einnahmen", fmtEUR(stmt.income), SUCCESS);
+    drawKpi(3.2, "Ausgaben", fmtEUR(stmt.expense), DANGER);
+    drawKpi(6.4, "Saldo", fmtEUR(stmt.balance), stmt.balance >= 0 ? SUCCESS : DANGER);
+    drawKpi(9.6, "Buchungen", `${stmt.count}`, SLATE);
+
+    // Detail-Buchungen (max. 18 Zeilen, damit es auf eine Folie passt)
+    if (stmt.rows.length === 0) {
+      s.addText("(keine Buchungen vorhanden)", {
+        x: 0.5,
+        y: 4.0,
+        w: 12.3,
+        h: 0.6,
+        fontFace: "Calibri",
+        fontSize: 14,
+        italic: true,
+        color: "94A3B8",
+        align: "center",
+      });
+      continue;
+    }
+
+    const head: PptxGenJS.TableRow = [
+      cell("Datum", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF" }),
+      cell("Konto", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF" }),
+      cell("Gegenpartei", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF" }),
+      cell("Verwendungszweck", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF" }),
+      cell("Mitglied", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF" }),
+      cell("Betrag", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF", align: "right" }),
+      cell("Saldo", { bold: true, fill: ROTARY_BLUE, color: "FFFFFF", align: "right" }),
+    ];
+
+    const visible = stmt.rows.slice(0, 18);
+    const dataRows: PptxGenJS.TableRow[] = visible.map((r) => [
+      cell(fmtDate(r.date)),
+      cell(
+        r.accountName === "Hauptkonto"
+          ? "Hauptkonto"
+          : r.accountName.includes("Global")
+            ? "GG"
+            : truncate(r.accountName, 14),
+      ),
+      cell(truncate(r.counterparty ?? "—", 28)),
+      cell(truncate(r.purpose ?? r.categoryName ?? "—", 38)),
+      cell(truncate(r.memberName ?? "—", 18)),
+      cell(fmtEUR(r.amount), {
+        align: "right",
+        color: r.amount < 0 ? DANGER : SUCCESS,
+      }),
+      cell(fmtEUR(r.runningBalance), {
+        align: "right",
+        bold: true,
+        color: r.runningBalance < 0 ? DANGER : SLATE,
+      }),
+    ]);
+
+    // Summenzeile
+    dataRows.push([
+      cell("", { fill: "F1F5F9" }),
+      cell("", { fill: "F1F5F9" }),
+      cell("", { fill: "F1F5F9" }),
+      cell(
+        stmt.rows.length > visible.length
+          ? `… ${stmt.rows.length - visible.length} weitere Buchungen (siehe Excel)`
+          : "",
+        { fill: "F1F5F9", italic: true, color: "94A3B8", fontSize: 9 },
+      ),
+      cell("Σ Saldo", { fill: "F1F5F9", bold: true, align: "right" }),
+      cell("", { fill: "F1F5F9" }),
+      cell(fmtEUR(stmt.balance), {
+        fill: "F1F5F9",
+        align: "right",
+        bold: true,
+        color: stmt.balance >= 0 ? SUCCESS : DANGER,
+      }),
+    ]);
+
+    s.addTable([head, ...dataRows], {
+      x: 0.4,
+      y: 2.05,
+      w: 12.5,
+      colW: [0.9, 1.1, 2.4, 3.3, 1.7, 1.4, 1.7],
+      fontFace: "Calibri",
+      fontSize: 9,
+      border: { type: "solid", pt: 0.5, color: "E2E8F0" },
+    });
+  }
+
   /* ============================ 6. Offene Mitgliedsbeiträge ============================ */
   {
     const s = pres.addSlide({ masterName: "ROTARY" });
@@ -483,21 +611,24 @@ function addTitle(s: PptxGenJS.Slide, title: string, subtitle?: string) {
 
 type CellOpts = {
   bold?: boolean;
+  italic?: boolean;
   fill?: string;
   color?: string;
   align?: "left" | "center" | "right";
   fontFace?: string;
+  fontSize?: number;
 };
 function cell(text: string, opts: CellOpts = {}): PptxGenJS.TableCell {
   return {
     text: String(text ?? ""),
     options: {
       bold: opts.bold,
+      italic: opts.italic,
       align: opts.align ?? "left",
       color: opts.color ?? SLATE,
       fill: opts.fill ? { color: opts.fill } : undefined,
       fontFace: opts.fontFace ?? "Calibri",
-      fontSize: 11,
+      fontSize: opts.fontSize ?? 11,
       valign: "middle",
       margin: 0.05,
     },
@@ -567,4 +698,8 @@ function buildSummaryBullets(r: TreasurerReport): string[] {
       : "Dieser Bericht stellt den Stand zum Ende des Clubjahres dar.",
   );
   return bullets;
+}
+function truncate(s: string, max: number) {
+  if (!s) return "";
+  return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "…";
 }

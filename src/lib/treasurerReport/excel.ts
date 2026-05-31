@@ -5,7 +5,8 @@
  *  1. Deckblatt (Executive Summary)
  *  2. Soll-Ist-Vergleich
  *  3. Buchungen (alle)
- *  4. Clubprojekte
+ *  4. Clubprojekte (Übersicht)
+ *  4a. Pro Clubprojekt: ein eigenes Sheet „Abr. <Code>" mit Detailbuchungen
  *  5. Offene Mitgliedsbeiträge
  *  6. Sonstige offene Forderungen
  *  7. Auslagenbericht
@@ -225,6 +226,139 @@ export async function buildTreasurerExcel(report: TreasurerReport): Promise<Buff
     r.eachCell((c) => {
       c.border = { top: { style: "medium" } };
     });
+  }
+
+  /* ====================== 4a. Detail-Abrechnungen pro Projekt ====================== */
+  for (const stmt of report.projectStatements) {
+    // Excel-Sheet-Namen sind auf 31 Zeichen limitiert + dürfen nicht doppelt
+    // existieren oder Sonderzeichen enthalten.
+    const safeCode = (stmt.code || "PRJ").replace(/[\\/?*\[\]:]/g, "_").slice(0, 24);
+    let title = `Abr. ${safeCode}`.slice(0, 31);
+    let n = 2;
+    while (wb.getWorksheet(title)) {
+      title = `${`Abr. ${safeCode}`.slice(0, 28)}_${n++}`.slice(0, 31);
+    }
+    const ws = wb.addWorksheet(title, {
+      properties: { tabColor: { argb: "FFA855F7" } },
+      views: [{ state: "frozen", ySplit: 5 }],
+    });
+    ws.columns = [
+      { width: 12 }, // A Datum
+      { width: 14 }, // B Konto
+      { width: 14 }, // C Clubjahr
+      { width: 28 }, // D Gegenpartei
+      { width: 40 }, // E Verwendungszweck
+      { width: 22 }, // F Kategorie
+      { width: 22 }, // G Mitglied
+      { width: 14 }, // H Betrag
+      { width: 14 }, // I Lfd. Saldo
+    ];
+    ws.mergeCells("A1:I1");
+    ws.getCell("A1").value = `Projekt-Abrechnung: ${stmt.code} – ${stmt.name}`;
+    ws.getCell("A1").font = { bold: true, size: 14, color: { argb: ROTARY_BLUE } };
+
+    ws.mergeCells("A2:I2");
+    const subtitle: string[] = [];
+    if (stmt.description) subtitle.push(stmt.description);
+    if (stmt.startDate)
+      subtitle.push(
+        `Start: ${stmt.startDate.toLocaleDateString("de-AT")}` +
+          (stmt.endDate ? ` · Ende: ${stmt.endDate.toLocaleDateString("de-AT")}` : ""),
+      );
+    subtitle.push(stmt.isClosed ? "Status: Abgeschlossen" : "Status: Aktiv");
+    ws.getCell("A2").value = subtitle.join(" · ");
+    ws.getCell("A2").font = { italic: true, color: { argb: "FF64748B" }, size: 10 };
+
+    // Kennzahlen
+    ws.getCell("A3").value = "Einnahmen";
+    ws.getCell("B3").value = stmt.income;
+    ws.getCell("B3").numFmt = eur;
+    ws.getCell("B3").font = { color: { argb: "FF047857" }, bold: true };
+    ws.getCell("C3").value = "Ausgaben";
+    ws.getCell("D3").value = stmt.expense;
+    ws.getCell("D3").numFmt = eur;
+    ws.getCell("D3").font = { color: { argb: "FFB91C1C" }, bold: true };
+    ws.getCell("E3").value = "Saldo";
+    ws.getCell("F3").value = stmt.balance;
+    ws.getCell("F3").numFmt = eur;
+    ws.getCell("F3").font = {
+      color: { argb: stmt.balance < 0 ? "FFB91C1C" : "FF047857" },
+      bold: true,
+    };
+    ws.getCell("G3").value = "Buchungen";
+    ws.getCell("H3").value = stmt.count;
+
+    // Tabellenkopf in Zeile 5
+    const headers = [
+      "Datum",
+      "Konto",
+      "Clubjahr",
+      "Gegenpartei",
+      "Verwendungszweck",
+      "Kategorie",
+      "Mitglied",
+      "Betrag (€)",
+      "Lfd. Saldo (€)",
+    ];
+    ws.getRow(5).values = headers;
+    styleHeader(ws.getRow(5));
+
+    let cursor = 6;
+    for (const r of stmt.rows) {
+      const row = ws.getRow(cursor++);
+      row.values = [
+        r.date,
+        r.accountName,
+        r.clubYearLabel,
+        r.counterparty ?? "",
+        r.purpose ?? "",
+        r.categoryName ?? "",
+        r.memberName ?? "",
+        r.amount,
+        r.runningBalance,
+      ];
+      row.getCell(1).numFmt = dateFmt;
+      row.getCell(8).numFmt = eur;
+      row.getCell(9).numFmt = eur;
+      if (r.amount < 0) row.getCell(8).font = { color: { argb: "FFB91C1C" } };
+      else row.getCell(8).font = { color: { argb: "FF047857" } };
+      row.getCell(9).font = {
+        color: { argb: r.runningBalance < 0 ? "FFB91C1C" : "FF334155" },
+        bold: true,
+      };
+    }
+
+    if (stmt.rows.length === 0) {
+      const r = ws.getRow(cursor++);
+      r.values = ["(keine Buchungen vorhanden)"];
+      r.font = { italic: true, color: { argb: "FF94A3B8" } };
+      ws.mergeCells(`A${r.number}:I${r.number}`);
+    } else {
+      // Summenzeile
+      const sum = ws.getRow(cursor++);
+      sum.values = [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Σ Saldo",
+        stmt.balance,
+        null,
+      ];
+      sum.font = { bold: true };
+      sum.getCell(8).numFmt = eur;
+      sum.getCell(8).font = {
+        bold: true,
+        color: { argb: stmt.balance < 0 ? "FFB91C1C" : "FF047857" },
+      };
+      sum.eachCell((c) => {
+        c.border = { top: { style: "medium" } };
+      });
+    }
+
+    ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: 9 } };
   }
 
   /* ============================ 5. Offene Mitgliedsbeiträge ============================ */

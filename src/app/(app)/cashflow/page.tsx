@@ -28,7 +28,7 @@ export default async function CashflowPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-5 fade-up">
       <header>
-        <h1 className="font-bold flex items-center gap-2"><TrendingUp className="size-6 text-blue-800 shrink-0" /> Liquiditätsplanung</h1>
+        <h1 className="font-bold flex items-center gap-2"><TrendingUp className="size-6 text-blue-800 shrink-0" /> (Zwischen-)Abschluss</h1>
         <p className="text-slate-500 text-sm">Clubjahr {cy.label} · Aktueller Saldo: <span className="font-bold">{startBalance.toLocaleString("de-AT", { style: "currency", currency: "EUR" })}</span></p>
       </header>
       <form method="get" className="card-soft p-3 flex flex-wrap gap-2 sm:gap-3 items-center">

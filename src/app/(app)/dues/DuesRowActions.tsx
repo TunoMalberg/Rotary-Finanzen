@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Mail, Check, Loader2 } from "lucide-react";
+import { Mail, Check, Loader2, RotateCcw } from "lucide-react";
 import { formatEUR, formatDate } from "@/lib/format";
 
 export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string } }) {
@@ -39,7 +39,42 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     router.refresh();
   }
 
-  if (invoice.status === "PAID" || invoice.status === "CANCELLED") return null;
+  async function reopen() {
+    if (
+      !confirm(
+        "Diese Forderung wieder auf \u201Eoffen\u201C setzen?\n\nVerwende dies, wenn z. B. ein SEPA-Einzug zurückgebucht wurde und der Beitrag doch nicht eingelangt ist.",
+      )
+    )
+      return;
+    setBusy(true);
+    const res = await fetch(`/api/invoices/${invoice.id}/reopen`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data?.message ?? `Fehler ${res.status}`);
+      return;
+    }
+    router.refresh();
+  }
+
+  if (invoice.status === "CANCELLED") return null;
+
+  // Bezahlte Forderungen: nur „Wieder öffnen" anbieten (z. B. nach Rückbuchung).
+  if (invoice.status === "PAID") {
+    return (
+      <div className="flex justify-end gap-1">
+        <button
+          onClick={reopen}
+          disabled={busy}
+          className="btn-ghost text-xs px-2 py-1"
+          title="Forderung wieder auf offen setzen (z. B. nach Rückbuchung)"
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />} Wieder offen
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex justify-end gap-1">
       <button onClick={remind} disabled={busy} className="btn-ghost text-xs px-2 py-1" title="Mahn-Mail senden">

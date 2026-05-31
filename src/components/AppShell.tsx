@@ -52,7 +52,7 @@ const NAV: readonly NavItem[] = [
     icon: ListChecks,
   },
   { href: "/budget", label: "Budget", icon: Wallet },
-  { href: "/cashflow", label: "Liquiditätsplanung", icon: TrendingUp },
+  { href: "/cashflow", label: "(Zwischen-)Abschluss", icon: TrendingUp },
   { href: "/categories", label: "Kategorien", icon: Tags, treasurerOnly: true },
   { href: "/reports", label: "Vergleichscharts", icon: PieChart },
   { href: "/archive", label: "Archiv & Clubjahre", icon: Archive },

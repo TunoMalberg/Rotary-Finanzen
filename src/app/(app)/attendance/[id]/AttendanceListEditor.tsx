@@ -14,6 +14,7 @@ import {
   Pencil,
   X,
   AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { formatDate, formatEUR } from "@/lib/format";
 
@@ -461,6 +462,26 @@ function EntryRow({
     }
   }
 
+  async function reopen() {
+    if (!entry.invoice) return;
+    if (
+      !confirm(
+        "Forderung wieder auf \u201Eoffen\u201C setzen?\n\nVerwende dies, wenn z. B. ein SEPA-Einzug zurückgebucht wurde und die Auslage doch nicht erstattet werden konnte.",
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await call(`/api/invoices/${entry.invoice.id}/reopen`, { method: "POST" });
+      router.refresh();
+      onChanged();
+    } catch {
+      /* */
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function sendClaimMail() {
     window.open(buildMailto({ entry, kind: "CLAIM", listEventName, listDescription }), "_blank");
   }
@@ -570,6 +591,17 @@ function EntryRow({
               title="Als bezahlt markieren"
             >
               <Check className="size-3.5" /> Bezahlt
+            </button>
+          )}
+          {entry.invoice && isPaid && editable && (
+            <button
+              type="button"
+              onClick={reopen}
+              disabled={busy}
+              className="btn-ghost text-xs px-2 py-1"
+              title="Forderung wieder auf offen setzen (z. B. nach Rückbuchung)"
+            >
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />} Wieder offen
             </button>
           )}
           {editable && !isPaid && (

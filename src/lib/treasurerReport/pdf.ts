@@ -48,6 +48,7 @@ export async function buildTreasurerPdf(report: TreasurerReport): Promise<Buffer
       drawTransactionsList(doc, report);
       doc.addPage();
       drawProjects(doc, report);
+      drawProjectStatements(doc, report);
       drawOpenDues(doc, report);
       drawOpenOther(doc, report);
       drawExpenseReimbursements(doc, report);
@@ -330,6 +331,141 @@ function drawProjects(doc: PDFKit.PDFDocument, r: TreasurerReport) {
     rowFill: PALE_BG,
   });
   doc.y += 16;
+}
+
+/* ====================== PROJEKT-DETAIL-ABRECHNUNGEN ====================== */
+
+function drawProjectStatements(doc: PDFKit.PDFDocument, r: TreasurerReport) {
+  if (r.projectStatements.length === 0) return;
+
+  doc.addPage();
+  drawSectionTitle(
+    doc,
+    "Projekt-Abrechnungen",
+    "Detail-Buchungen je Clubprojekt mit laufendem Saldo",
+  );
+
+  for (let idx = 0; idx < r.projectStatements.length; idx++) {
+    const s = r.projectStatements[idx];
+
+    // Jeder Block soll bevorzugt auf einer neuen Seite starten – außer der
+    // erste passt direkt unter den Section-Title.
+    if (idx > 0) doc.addPage();
+    else ensureSpace(doc, 220);
+
+    // Projekt-Block-Header (Farbiger Balken + Titel)
+    const headerY = doc.y;
+    doc.rect(MARGIN, headerY, doc.page.width - 2 * MARGIN, 26).fill(s.color || ROTARY_BLUE);
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13)
+      .text(`${s.code} – ${s.name}`, MARGIN + 8, headerY + 6, {
+        width: doc.page.width - 2 * MARGIN - 16,
+      });
+    doc.y = headerY + 30;
+
+    if (s.description) {
+      doc.fillColor(SLATE).font("Helvetica").fontSize(9)
+        .text(s.description, MARGIN, doc.y, { width: doc.page.width - 2 * MARGIN });
+      doc.moveDown(0.4);
+    }
+
+    // Meta-Zeile
+    const meta: string[] = [];
+    if (s.startDate) {
+      meta.push(
+        `Start ${fmtDate(s.startDate)}` + (s.endDate ? ` · Ende ${fmtDate(s.endDate)}` : ""),
+      );
+    }
+    meta.push(s.isClosed ? "Status: Abgeschlossen" : "Status: Aktiv");
+    meta.push(`${s.count} Buchung${s.count === 1 ? "" : "en"}`);
+    doc.fillColor(SLATE_LIGHT).font("Helvetica-Oblique").fontSize(9)
+      .text(meta.join(" · "), MARGIN, doc.y);
+    doc.moveDown(0.4);
+
+    // KPI-Box (Einnahmen/Ausgaben/Saldo)
+    const kpiY = doc.y;
+    const kpiW = (doc.page.width - 2 * MARGIN - 16) / 3;
+    const drawKpi = (xOff: number, label: string, val: number, color: string) => {
+      const x = MARGIN + xOff;
+      doc.rect(x, kpiY, kpiW, 36).fill(PALE_BG);
+      doc.fillColor(SLATE).font("Helvetica").fontSize(8)
+        .text(label, x + 6, kpiY + 4, { width: kpiW - 12 });
+      doc.fillColor(color).font("Helvetica-Bold").fontSize(13)
+        .text(fmtEUR(val), x + 6, kpiY + 16, { width: kpiW - 12 });
+    };
+    drawKpi(0, "Einnahmen", s.income, SUCCESS);
+    drawKpi(kpiW + 8, "Ausgaben", s.expense, DANGER);
+    drawKpi(2 * (kpiW + 8), "Saldo", s.balance, s.balance >= 0 ? SUCCESS : DANGER);
+    doc.y = kpiY + 44;
+
+    // Detail-Buchungstabelle
+    if (s.rows.length === 0) {
+      doc.fillColor(SLATE_LIGHT).font("Helvetica-Oblique").fontSize(10)
+        .text("(keine Buchungen vorhanden)", MARGIN, doc.y);
+      doc.y += 18;
+      continue;
+    }
+
+    drawTable(doc, {
+      cols: [
+        { width: 50, label: "Datum" },
+        { width: 50, label: "Konto" },
+        { width: 130, label: "Gegenpartei" },
+        { width: 170, label: "Verwendungszweck" },
+        { width: 60, label: "Betrag", align: "right" as const },
+        { width: 55, label: "Saldo", align: "right" as const },
+      ],
+      rows: s.rows.map((row) => [
+        fmtDate(row.date),
+        row.accountName === "Hauptkonto" ? "MAIN" : row.accountName.includes("Global") ? "GG" : row.accountName,
+        truncate(row.counterparty ?? "—", 28),
+        truncate(row.purpose ?? row.categoryName ?? "—", 38),
+        {
+          text: fmtEUR(row.amount),
+          align: "right" as const,
+          color: row.amount < 0 ? DANGER : SUCCESS,
+        },
+        {
+          text: fmtEUR(row.runningBalance),
+          align: "right" as const,
+          bold: true,
+          color: row.runningBalance < 0 ? DANGER : SLATE,
+        },
+      ]),
+      pageBreak: true,
+      fontSize: 8,
+    });
+
+    // Summenzeile
+    drawTable(doc, {
+      cols: [
+        { width: 50, label: "" },
+        { width: 50, label: "" },
+        { width: 130, label: "" },
+        { width: 170, label: "" },
+        { width: 60, label: "", align: "right" as const },
+        { width: 55, label: "", align: "right" as const },
+      ],
+      rows: [
+        [
+          "",
+          "",
+          "",
+          { text: "Σ Saldo", bold: true, align: "right" as const },
+          {
+            text: fmtEUR(s.balance),
+            align: "right" as const,
+            bold: true,
+            color: s.balance < 0 ? DANGER : SUCCESS,
+          },
+          "",
+        ],
+      ],
+      showHeader: false,
+      rowFill: PALE_BG,
+      fontSize: 8,
+    });
+    doc.y += 10;
+  }
 }
 
 /* ============================ OFFENE FORDERUNGEN ============================ */
