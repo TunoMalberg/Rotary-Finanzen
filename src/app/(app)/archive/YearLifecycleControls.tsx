@@ -13,7 +13,23 @@ import {
   Gavel,
   AlertTriangle,
   FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
+
+type DeletionSummary = {
+  clubYearId: string;
+  label: string;
+  isLocked: boolean;
+  isAudited: boolean;
+  isClosed: boolean;
+  archived: boolean;
+  transactions: number;
+  invoices: number;
+  attendanceLists: number;
+  budgetLines: number;
+  cashflows: number;
+  categories: number;
+};
 
 type Year = {
   id: string;
@@ -37,6 +53,8 @@ export function YearLifecycleControls({ year, canEdit }: { year: Year; canEdit: 
     file: File;
     deleteMissing: boolean;
   } | null>(null);
+  const [deletePreview, setDeletePreview] = useState<DeletionSummary | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   async function call(url: string, body?: unknown, label?: string) {
     setBusy(label ?? url);
@@ -107,6 +125,47 @@ export function YearLifecycleControls({ year, canEdit }: { year: Year; canEdit: 
     const data = await res.json();
     setImportPreview({ summary: data.summary, file, deleteMissing });
   }
+  async function startDelete() {
+    setError(null);
+    setInfo(null);
+    setBusy("delete-preview");
+    const res = await fetch(`/api/clubyears/${year.id}`);
+    setBusy(null);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error ?? "Vorschau fehlgeschlagen");
+      return;
+    }
+    const data = (await res.json()) as DeletionSummary;
+    setDeleteConfirmText("");
+    setDeletePreview(data);
+  }
+
+  async function confirmDelete() {
+    if (!deletePreview) return;
+    if (deleteConfirmText.trim() !== year.label) return;
+    setBusy("delete");
+    setError(null);
+    const total =
+      deletePreview.transactions +
+      deletePreview.invoices +
+      deletePreview.attendanceLists +
+      deletePreview.budgetLines +
+      deletePreview.cashflows +
+      deletePreview.categories;
+    const url = total > 0 ? `/api/clubyears/${year.id}?force=1` : `/api/clubyears/${year.id}`;
+    const res = await fetch(url, { method: "DELETE" });
+    setBusy(null);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error ?? "Löschen fehlgeschlagen");
+      return;
+    }
+    setDeletePreview(null);
+    setInfo(`Clubjahr ${year.label} und alle zugehörigen Daten wurden gelöscht.`);
+    router.refresh();
+  }
+
   async function commit() {
     if (!importPreview) return;
     setImportBusy(true);
@@ -196,6 +255,22 @@ export function YearLifecycleControls({ year, canEdit }: { year: Year; canEdit: 
         </>
       )}
 
+      {canEdit && !year.lockedAt && (
+        <button
+          onClick={startDelete}
+          disabled={!!busy}
+          className="btn-ghost text-xs text-rose-700 hover:bg-rose-50"
+          title="Clubjahr und alle zugehörigen Daten löschen"
+        >
+          {busy === "delete-preview" || busy === "delete" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="size-3.5" />
+          )}{" "}
+          Löschen
+        </button>
+      )}
+
       {error && (
         <div role="alert" className="basis-full mt-2 text-xs text-red-700 inline-flex items-start gap-1">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" /> {error}
@@ -209,6 +284,21 @@ export function YearLifecycleControls({ year, canEdit }: { year: Year; canEdit: 
           busy={importBusy}
           onCancel={() => setImportPreview(null)}
           onCommit={commit}
+        />
+      )}
+
+      {deletePreview && (
+        <DeleteConfirmModal
+          summary={deletePreview}
+          year={year}
+          confirmText={deleteConfirmText}
+          onChangeConfirmText={setDeleteConfirmText}
+          busy={busy === "delete"}
+          onCancel={() => {
+            setDeletePreview(null);
+            setDeleteConfirmText("");
+          }}
+          onConfirm={confirmDelete}
         />
       )}
     </div>
@@ -264,6 +354,147 @@ function ImportPreviewModal({
           <button onClick={onCancel} className="btn-ghost">Abbrechen</button>
           <button onClick={onCommit} disabled={busy} className="btn-primary">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Übernehmen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function DeleteConfirmModal({
+  summary,
+  year,
+  confirmText,
+  onChangeConfirmText,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  summary: DeletionSummary;
+  year: Year;
+  confirmText: string;
+  onChangeConfirmText: (s: string) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const total =
+    summary.transactions +
+    summary.invoices +
+    summary.attendanceLists +
+    summary.budgetLines +
+    summary.cashflows +
+    summary.categories;
+  const canConfirm = confirmText.trim() === year.label && !busy;
+  return (
+    <div
+      aria-modal="true"
+      aria-labelledby="delete-year-title"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
+      }}
+    >
+      <div className="card-soft p-5 max-w-lg w-full">
+        <h3
+          id="delete-year-title"
+          className="text-lg font-semibold mb-2 flex items-center gap-2 text-rose-700"
+        >
+          <Trash2 className="size-5" /> Clubjahr {year.label} löschen
+        </h3>
+
+        <div className="rounded-md border border-rose-200 bg-rose-50 text-rose-800 text-sm p-3 mb-3 flex items-start gap-2">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <strong>Diese Aktion kann nicht rückgängig gemacht werden.</strong>
+            <br />
+            Alle Buchungen, Forderungen, Auslagenlisten, Budget-Einträge,
+            Cashflow-Planungen und jahres-spezifischen Kategorien dieses
+            Clubjahres werden unwiderruflich entfernt.
+          </div>
+        </div>
+
+        {total === 0 ? (
+          <p className="text-sm text-slate-600 mb-3">
+            Dieses Clubjahr enthält keine Daten – nur der Jahres-Eintrag selbst
+            wird gelöscht.
+          </p>
+        ) : (
+          <ul className="text-sm space-y-1 mb-4">
+            {summary.transactions > 0 && (
+              <li>
+                Buchungen:{" "}
+                <strong className="text-rose-700">{summary.transactions}</strong>
+              </li>
+            )}
+            {summary.invoices > 0 && (
+              <li>
+                Forderungen (Beiträge & Auslagen):{" "}
+                <strong className="text-rose-700">{summary.invoices}</strong>
+              </li>
+            )}
+            {summary.attendanceLists > 0 && (
+              <li>
+                Teilnahmelisten:{" "}
+                <strong className="text-rose-700">{summary.attendanceLists}</strong>
+              </li>
+            )}
+            {summary.budgetLines > 0 && (
+              <li>
+                Budget-Einträge:{" "}
+                <strong className="text-rose-700">{summary.budgetLines}</strong>
+              </li>
+            )}
+            {summary.cashflows > 0 && (
+              <li>
+                Cashflow-Einträge:{" "}
+                <strong className="text-rose-700">{summary.cashflows}</strong>
+              </li>
+            )}
+            {summary.categories > 0 && (
+              <li>
+                Jahres-Kategorien:{" "}
+                <strong className="text-rose-700">{summary.categories}</strong>
+              </li>
+            )}
+            {summary.archived && (
+              <li>Archiv-Datei wird mitgelöscht.</li>
+            )}
+          </ul>
+        )}
+
+        <label className="block text-sm font-semibold text-slate-700 mb-1">
+          Zur Bestätigung gib bitte „{year.label}" exakt ein:
+        </label>
+        <input
+          autoFocus
+          className="input mb-4"
+          value={confirmText}
+          onChange={(e) => onChangeConfirmText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canConfirm) onConfirm();
+          }}
+          placeholder={year.label}
+        />
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-ghost" disabled={busy}>
+            Abbrechen
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            className="btn-primary"
+            style={{ background: canConfirm ? "#b91c1c" : undefined }}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}{" "}
+            Endgültig löschen
           </button>
         </div>
       </div>
