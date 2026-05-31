@@ -4,6 +4,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { CashflowView } from "./CashflowView";
 import { TreasurerReportPanel } from "./TreasurerReportPanel";
+import { AssetEvolutionChart } from "./AssetEvolutionChart";
 import { TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ export default async function CashflowPage({ searchParams }: { searchParams: Pro
         </select>
         <button className="btn-ghost text-sm">Anzeigen</button>
       </form>
+      <AssetEvolutionChart />
+
       <CashflowView
         clubYearId={cy.id}
         entries={entries.map((e) => ({ id: e.id, date: e.date.toISOString(), label: e.label, amount: e.amount, isPlanned: e.isPlanned }))}
