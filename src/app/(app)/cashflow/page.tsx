@@ -3,6 +3,7 @@ import { getCurrentClubYear, getAccountBalance } from "@/lib/dataAccess";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { CashflowView } from "./CashflowView";
+import { TreasurerReportPanel } from "./TreasurerReportPanel";
 import { TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,14 @@ export default async function CashflowPage({ searchParams }: { searchParams: Pro
         startBalance={startBalance}
         canEdit={canEdit}
       />
+
+      {canEdit && (
+        <TreasurerReportPanel
+          clubYearId={cy.id}
+          clubYearLabel={cy.label}
+          isInterim={cy.endsAt > new Date()}
+        />
+      )}
     </div>
   );
 }
