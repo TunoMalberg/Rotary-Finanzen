@@ -9,8 +9,8 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const callback = params.get("callbackUrl") ?? "/dashboard";
-  const [email, setEmail] = useState("treasurer@wien-donau.at");
-  const [password, setPassword] = useState("Treasurer!2025");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,14 +110,7 @@ function LoginInner() {
             </button>
           </form>
 
-          <div className="mt-6 sm:mt-8 text-xs text-slate-500 border-t pt-5 sm:pt-6">
-            <div className="font-semibold text-slate-700 mb-2">Demo-Zugänge</div>
-            <div className="space-y-1.5 font-mono break-all">
-              <div>Schatzmeister: <span className="text-slate-700">treasurer@wien-donau.at</span> / <span className="text-slate-700">Treasurer!2025</span></div>
-              <div>Präsident: <span className="text-slate-700">praesident@wien-donau.at</span> / <span className="text-slate-700">President!2025</span></div>
-            </div>
           </div>
-        </div>
       </div>
     </div>
   );
