@@ -10,19 +10,22 @@ export const runtime = "nodejs";
  * Liefert die tagesgenaue Entwicklung des Gesamtvermögens
  * (Hauptkonto + Global Grant) zwischen `from` und `to` (inkl.).
  *
- * Berechnung:
- *  - Eröffnungs-Saldo des frühesten Clubjahrs als absoluter Anfangssaldo.
- *  - Alle Buchungen aller Clubjahre werden chronologisch summiert.
- *  - `startBalance` = Anfangssaldo + Σ Buchungen mit Datum < from
- *  - Anschließend wird für jeden Tag im Bereich [from, to] der Saldo
- *    nach Anwendung der Tages-Buchungen ausgegeben.
+ * Berechnung — exakt analog zu `getAccountBalance(account, clubYearId)`:
+ *  Für jeden Tag d wird das Clubjahr Y(d) bestimmt, das d enthält
+ *  (oder das letzte vor d, falls d außerhalb aller Jahre liegt).
+ *  Saldo(d) = Y(d).openingBalance + Σ Buchungen mit clubYearId == Y(d) UND date ≤ d
+ *
+ *  Dadurch werden manuell gesetzte Eröffnungssalden respektiert
+ *  (sie können vom rechnerischen Endsaldo des Vorjahres abweichen
+ *  → "Übernahme-Delta", siehe /accounts).
+ *  An Clubjahresgrenzen entsteht ein Sprung in Höhe dieses Deltas.
  *
  * Liefert für jeden Tag drei Salden:
  *  - main: nur Hauptkonto
  *  - gg:   nur Global Grant
  *  - total: Summe (= „Gesamtvermögen")
  *
- * Wenn `to` fehlt → heute. Wenn `from` fehlt → erster Tag des aktuellen
+ * Wenn `to` fehlt → heute. Wenn `from` fehlt → erster Tag des frühesten
  * Clubjahres. Maximaler Bereich: 6 Jahre.
  */
 export async function GET(req: Request) {
@@ -42,22 +45,22 @@ export async function GET(req: Request) {
     );
   }
 
-  // Frühestes Clubjahr → absoluter Anfangssaldo
-  const earliest = await prisma.clubYear.findFirst({
+  // Alle Clubjahre, aufsteigend
+  const years = await prisma.clubYear.findMany({
     orderBy: { startsAt: "asc" },
     select: {
       id: true,
       startsAt: true,
+      endsAt: true,
       openingBalanceMain: true,
       openingBalanceGG: true,
     },
   });
-  if (!earliest) {
-    return NextResponse.json(
-      { error: "Kein Clubjahr vorhanden." },
-      { status: 404 },
-    );
+  if (years.length === 0) {
+    return NextResponse.json({ error: "Kein Clubjahr vorhanden." }, { status: 404 });
   }
+  const earliest = years[0];
+  const latest = years[years.length - 1];
 
   // Default-Range
   const from = fromStr ? parseDateUtc(fromStr) : startOfDayUtc(earliest.startsAt);
@@ -77,39 +80,103 @@ export async function GET(req: Request) {
     );
   }
 
-  // Alle Buchungen (für beide Konten, egal welches Jahr) bis einschl. `to`.
+  // Alle Buchungen (für beide Konten) bis einschl. `to`.
+  // Wir benötigen pro clubYearId getrennte Aggregate.
   const txs = await prisma.transaction.findMany({
     where: {
       accountId: { in: [mainAcc.id, ggAcc.id] },
       deletedAt: null,
       date: { lte: endOfDayUtc(to) },
     },
-    select: { date: true, amount: true, accountId: true },
+    select: { date: true, amount: true, accountId: true, clubYearId: true },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
 
-  // Aggregate pro Tag (lokal-Datums-Schlüssel YYYY-MM-DD, UTC-basiert)
-  const dayDeltas = new Map<string, { main: number; gg: number }>();
-  let preMainBefore = earliest.openingBalanceMain;
-  let preGgBefore = earliest.openingBalanceGG;
+  // Pro Jahr → pro Tag (yyyy-mm-dd) → {main, gg} Delta
+  const byYearByDay = new Map<string, Map<string, { main: number; gg: number }>>();
   for (const t of txs) {
-    const dayKey = isoDate(startOfDayUtc(t.date));
-    const isMain = t.accountId === mainAcc.id;
-    if (startOfDayUtc(t.date) < from) {
-      // vor dem Anzeige-Bereich → in startBalance einfließen lassen
-      if (isMain) preMainBefore += t.amount;
-      else preGgBefore += t.amount;
-      continue;
+    let m = byYearByDay.get(t.clubYearId);
+    if (!m) {
+      m = new Map();
+      byYearByDay.set(t.clubYearId, m);
     }
-    const cur = dayDeltas.get(dayKey) ?? { main: 0, gg: 0 };
-    if (isMain) cur.main += t.amount;
+    const dayKey = isoDate(startOfDayUtc(t.date));
+    const cur = m.get(dayKey) ?? { main: 0, gg: 0 };
+    if (t.accountId === mainAcc.id) cur.main += t.amount;
     else cur.gg += t.amount;
-    dayDeltas.set(dayKey, cur);
+    m.set(dayKey, cur);
   }
 
-  // Tagesserie aufbauen
-  let runMain = preMainBefore;
-  let runGg = preGgBefore;
+  /**
+   * Liefert das Clubjahr, dem der Tag d zugeordnet wird:
+   * 1) Y mit startsAt ≤ d ≤ endsAt
+   * 2) sonst das letzte Y mit startsAt ≤ d
+   * 3) sonst das früheste Y
+   */
+  function yearFor(d: Date) {
+    const inRange = years.find((y) => y.startsAt <= d && d <= y.endsAt);
+    if (inRange) return inRange;
+    if (d < earliest.startsAt) return earliest;
+    // d > latest.endsAt → letztes Jahr nehmen
+    let candidate = earliest;
+    for (const y of years) {
+      if (y.startsAt <= d) candidate = y;
+    }
+    return candidate;
+  }
+
+  /**
+   * Saldo für Tag d laut Clubjahres-Logik:
+   *   Y(d).opening + Σ tx mit clubYearId == Y(d) UND date ≤ d
+   * Wenn d < Y(d).startsAt: nur opening (Tx mit früherem Datum aber demselben
+   * clubYearId fließen rückwirkend ins opening ein — wir zeigen dennoch
+   * deterministisch das opening als Anfang).
+   *
+   * Damit das mit `getAccountBalance` für d ≥ Y.endsAt konsistent ist,
+   * berücksichtigen wir bei d ≥ Y.endsAt ALLE Transaktionen des Jahres
+   * (auch mit Datum > endsAt).
+   */
+  // Vorab: pro Jahr sortierte Tageskeys + kumulative Salden.
+  type Cum = { day: string; main: number; gg: number };
+  const yearCum = new Map<string, Cum[]>();
+  for (const y of years) {
+    const dayMap = byYearByDay.get(y.id);
+    const days = dayMap ? Array.from(dayMap.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1)) : [];
+    let runMain = y.openingBalanceMain;
+    let runGg = y.openingBalanceGG;
+    const cum: Cum[] = [];
+    for (const [dayKey, delta] of days) {
+      runMain += delta.main;
+      runGg += delta.gg;
+      cum.push({ day: dayKey, main: runMain, gg: runGg });
+    }
+    yearCum.set(y.id, cum);
+  }
+
+  /** Findet kumulativen Saldo für Jahr y am Tag d (oder letzter Wert ≤ d). */
+  function cumAt(yId: string, dKey: string): { main: number; gg: number } | null {
+    const cum = yearCum.get(yId);
+    if (!cum || cum.length === 0) return null;
+    // Binary search: größter Index mit cum[i].day ≤ dKey
+    let lo = 0;
+    let hi = cum.length - 1;
+    let pos = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid].day <= dKey) {
+        pos = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (pos < 0) return null;
+    return { main: cum[pos].main, gg: cum[pos].gg };
+  }
+
+  // Für jeden Tag: Saldo = Y(d).opening + cumAt(Y(d), d) − Y(d).opening
+  // = cumAt-Wert (da cum bereits opening enthält). Wenn kein cum-Eintrag (kein
+  // Tx vor d in Y(d)), → opening.
   const series: Array<{
     date: string;
     main: number;
@@ -118,31 +185,48 @@ export async function GET(req: Request) {
     delta: number;
   }> = [];
 
+  let prevTotal: number | null = null;
   for (let d = new Date(from); d <= to; d = addDaysUtc(d, 1)) {
-    const dayKey = isoDate(d);
-    const delta = dayDeltas.get(dayKey);
-    if (delta) {
-      runMain += delta.main;
-      runGg += delta.gg;
-    }
+    const dKey = isoDate(d);
+    const y = yearFor(d);
+    const cum = cumAt(y.id, dKey);
+    const main = cum ? cum.main : y.openingBalanceMain;
+    const gg = cum ? cum.gg : y.openingBalanceGG;
+    const total = main + gg;
+    const delta = prevTotal == null ? 0 : total - prevTotal;
     series.push({
-      date: dayKey,
-      main: round2(runMain),
-      gg: round2(runGg),
-      total: round2(runMain + runGg),
-      delta: round2((delta?.main ?? 0) + (delta?.gg ?? 0)),
+      date: dKey,
+      main: round2(main),
+      gg: round2(gg),
+      total: round2(total),
+      delta: round2(delta),
     });
+    prevTotal = total;
   }
+
+  // startBalance für KPIs: Saldo am ersten angezeigten Tag (vor dem Tagesdelta).
+  // Wir zeigen den Saldo des Tages vor `from` (= "Stand zu Beginn").
+  const dayBeforeFrom = addDaysUtc(from, -1);
+  const yPrev = yearFor(dayBeforeFrom);
+  const cumPrev = cumAt(yPrev.id, isoDate(dayBeforeFrom));
+  const startMain = cumPrev ? cumPrev.main : yPrev.openingBalanceMain;
+  const startGg = cumPrev ? cumPrev.gg : yPrev.openingBalanceGG;
 
   return NextResponse.json({
     from: isoDate(from),
     to: isoDate(to),
     startBalance: {
-      main: round2(preMainBefore),
-      gg: round2(preGgBefore),
-      total: round2(preMainBefore + preGgBefore),
+      main: round2(startMain),
+      gg: round2(startGg),
+      total: round2(startMain + startGg),
     },
     series,
+    // Diagnostik (zur Plausibilitätsprüfung):
+    meta: {
+      yearsCount: years.length,
+      earliest: isoDate(earliest.startsAt),
+      latest: isoDate(latest.endsAt),
+    },
   });
 }
 
