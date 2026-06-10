@@ -32,7 +32,6 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
   }
 
   async function markPaid() {
-    if (!confirm("Forderung als bezahlt markieren?")) return;
     setBusy(true);
     await fetch(`/api/invoices/${invoice.id}/markPaid`, { method: "POST" });
     setBusy(false);
@@ -40,12 +39,6 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
   }
 
   async function reopen() {
-    if (
-      !confirm(
-        "Diese Forderung wieder auf \u201Eoffen\u201C setzen?\n\nVerwende dies, wenn z. B. ein SEPA-Einzug zurückgebucht wurde und der Beitrag doch nicht eingelangt ist.",
-      )
-    )
-      return;
     setBusy(true);
     const res = await fetch(`/api/invoices/${invoice.id}/reopen`, { method: "POST" });
     setBusy(false);

@@ -36,23 +36,45 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     : params.account === "gg" ? accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST")
     : null;
 
-  const where: {
+  // Suche: Gegenpartei, Verwendungszweck, Notiz, Code,
+  //        verknüpftes Mitglied (Vor-/Nachname/E-Mail) sowie
+  //        partnerName/IBAN aus Sammelbuchungs-Aufteilungen
+  //        und Member-Namen in Allocations.
+  // Alle Treffer case-insensitive (Postgres ILIKE).
+  type Q = { contains: string; mode: "insensitive" };
+  const q = params.q?.trim();
+  const ic = (s: string): Q => ({ contains: s, mode: "insensitive" });
+
+  type WhereT = {
     clubYearId: string;
     deletedAt: null;
     accountId?: string;
     categoryId?: string;
-    OR?: Array<{ counterparty?: { contains: string }; purpose?: { contains: string }; note?: { contains: string } }>;
-  } = {
+    OR?: Array<Record<string, unknown>>;
+  };
+  const where: WhereT = {
     clubYearId: cy.id,
     deletedAt: null,
   };
   if (accountFilter) where.accountId = accountFilter.id;
   if (params.cat && params.cat !== "all") where.categoryId = params.cat;
-  if (params.q) where.OR = [
-    { counterparty: { contains: params.q } },
-    { purpose: { contains: params.q } },
-    { note: { contains: params.q } },
-  ];
+  if (q) {
+    where.OR = [
+      { counterparty: ic(q) },
+      { purpose: ic(q) },
+      { note: ic(q) },
+      { code: ic(q) },
+      // direkt verknüpftes Mitglied
+      { member: { firstName: ic(q) } },
+      { member: { lastName: ic(q) } },
+      { member: { email: ic(q) } },
+      // SEPA-/Sammelbuchungs-Aufteilungen
+      { allocations: { some: { partnerName: ic(q) } } },
+      { allocations: { some: { partnerIban: ic(q) } } },
+      { allocations: { some: { member: { firstName: ic(q) } } } },
+      { allocations: { some: { member: { lastName: ic(q) } } } },
+    ];
+  }
 
   // Hauptabfrage + aktuelle Salden parallel (Salden via groupBy in 1 Query)
   const [txs, balanceForHeader] = await Promise.all([
@@ -158,7 +180,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </div>
         <div className="sm:col-span-2">
           <label className="text-xs font-semibold text-slate-600 mb-1 block">Suche</label>
-          <input type="text" name="q" defaultValue={params.q ?? ""} className="input" placeholder="Gegenpartei, Verwendungszweck …" />
+          <input type="text" name="q" defaultValue={params.q ?? ""} className="input" placeholder="Gegenpartei, Verwendungszweck, Mitglied …" />
         </div>
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 sm:col-span-2 lg:col-span-5">
           <div className="flex gap-2 flex-wrap btn-row">

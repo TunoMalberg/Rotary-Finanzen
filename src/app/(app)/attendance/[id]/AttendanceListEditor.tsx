@@ -450,7 +450,6 @@ function EntryRow({
 
   async function markPaid() {
     if (!entry.invoice) return;
-    if (!confirm("Forderung als bezahlt markieren?")) return;
     setBusy(true);
     try {
       await call(`/api/invoices/${entry.invoice.id}/markPaid`, { method: "POST" });
@@ -464,12 +463,6 @@ function EntryRow({
 
   async function reopen() {
     if (!entry.invoice) return;
-    if (
-      !confirm(
-        "Forderung wieder auf \u201Eoffen\u201C setzen?\n\nVerwende dies, wenn z. B. ein SEPA-Einzug zurückgebucht wurde und die Auslage doch nicht erstattet werden konnte.",
-      )
-    )
-      return;
     setBusy(true);
     try {
       await call(`/api/invoices/${entry.invoice.id}/reopen`, { method: "POST" });

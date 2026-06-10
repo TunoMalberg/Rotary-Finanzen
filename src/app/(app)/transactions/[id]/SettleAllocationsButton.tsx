@@ -20,12 +20,6 @@ export function SettleAllocationsButton({
   const [error, setError] = useState<string | null>(null);
 
   async function settle() {
-    if (
-      !confirm(
-        `${openCount} verknüpfte Forderung(en) als bezahlt markieren? Die Forderungen werden mit dieser Sammelbuchung verknüpft (paidTransactionId).`,
-      )
-    )
-      return;
     setBusy(true);
     setError(null);
     const res = await fetch(
