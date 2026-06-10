@@ -9,8 +9,7 @@ import { MemberEditForm } from "./MemberEditForm";
 export const dynamic = "force-dynamic";
 
 export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const session = await getServerSession(authOptions);
+  const [{ id }, session] = await Promise.all([params, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
   const m = await prisma.member.findUnique({
     where: { id },

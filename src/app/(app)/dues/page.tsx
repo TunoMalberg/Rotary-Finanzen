@@ -10,13 +10,11 @@ import { DuesActions } from "./DuesActions";
 export const dynamic = "force-dynamic";
 
 export default async function DuesPage({ searchParams }: { searchParams: Promise<{ year?: string; status?: string; method?: string }> }) {
-  const params = await searchParams;
-  const session = await getServerSession(authOptions);
+  const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
   const cy = params.year
     ? (await prisma.clubYear.findUnique({ where: { id: params.year } })) ?? (await getCurrentClubYear())
     : await getCurrentClubYear();
-  const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
 
   const where: { clubYearId: string; type: string; status?: string | { in: string[] }; paymentMethod?: string } = {
     clubYearId: cy.id,
@@ -28,16 +26,20 @@ export default async function DuesPage({ searchParams }: { searchParams: Promise
   if (params.method === "sepa") where.paymentMethod = "SEPA";
   else if (params.method === "invoice") where.paymentMethod = "EMAIL_INVOICE";
 
-  const invoices = await prisma.invoice.findMany({
-    where,
-    orderBy: [{ status: "asc" }, { dueDate: "asc" }],
-    include: { member: true, paidTransaction: true },
-  });
-
-  const total = await prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES" }, _sum: { amount: true } });
-  const open = await prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES", status: { in: ["OPEN", "REMINDED"] } }, _sum: { amount: true }, _count: true });
-  const paid = await prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES", status: "PAID" }, _sum: { amount: true }, _count: true });
-  const overdue = await prisma.invoice.count({ where: { clubYearId: cy.id, type: "DUES", status: { in: ["OPEN", "REMINDED"] }, dueDate: { lt: new Date() } } });
+  // Alle Queries parallel (vorher 6 sequenziell)
+  const now = new Date();
+  const [allYears, invoices, total, open, paid, overdue] = await Promise.all([
+    prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } }),
+    prisma.invoice.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { dueDate: "asc" }],
+      include: { member: true, paidTransaction: true },
+    }),
+    prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES" }, _sum: { amount: true } }),
+    prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES", status: { in: ["OPEN", "REMINDED"] } }, _sum: { amount: true }, _count: true }),
+    prisma.invoice.aggregate({ where: { clubYearId: cy.id, type: "DUES", status: "PAID" }, _sum: { amount: true }, _count: true }),
+    prisma.invoice.count({ where: { clubYearId: cy.id, type: "DUES", status: { in: ["OPEN", "REMINDED"] }, dueDate: { lt: now } } }),
+  ]);
 
   return (
     <div className="space-y-5 fade-up">

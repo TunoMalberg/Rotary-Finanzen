@@ -8,16 +8,17 @@ import { Wallet } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function BudgetPage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
-  const params = await searchParams;
-  const session = await getServerSession(authOptions);
+  const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
   const cy = params.year
     ? (await prisma.clubYear.findUnique({ where: { id: params.year } })) ?? (await getCurrentClubYear())
     : await getCurrentClubYear();
-  const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
-  const lines = await prisma.budgetLine.findMany({ where: { clubYearId: cy.id } });
-  const totals = await getCategoryTotals(cy.id);
+  const [allYears, categories, lines, totals] = await Promise.all([
+    prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } }),
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.budgetLine.findMany({ where: { clubYearId: cy.id } }),
+    getCategoryTotals(cy.id),
+  ]);
 
   const data = categories.map((c) => {
     const line = lines.find((l) => l.categoryId === c.id);

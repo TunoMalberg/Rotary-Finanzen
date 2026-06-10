@@ -8,8 +8,7 @@ import { getServerSession } from "next-auth";
 export const dynamic = "force-dynamic";
 
 export default async function MembersPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; method?: string }> }) {
-  const params = await searchParams;
-  const session = await getServerSession(authOptions);
+  const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
 
   const where: { status?: string | { in: string[] }; paysBySEPA?: boolean; isExempt?: boolean; OR?: Array<{ lastName?: { contains: string }; firstName?: { contains: string }; email?: { contains: string } }> } = {};

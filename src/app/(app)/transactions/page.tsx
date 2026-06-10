@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getAccountBalance, getCurrentClubYear } from "@/lib/dataAccess";
+import { getAccountBalancesBatch, getCurrentClubYear } from "@/lib/dataAccess";
 import { computeRunningBalances } from "@/lib/runningBalance";
 import { formatDate, formatEUR } from "@/lib/format";
 import { TransactionsTable } from "./TransactionsTable";
@@ -11,25 +11,26 @@ import { getServerSession } from "next-auth";
 export const dynamic = "force-dynamic";
 
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ account?: string; q?: string; year?: string; cat?: string }> }) {
-  const params = await searchParams;
-  const session = await getServerSession(authOptions);
+  const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const isTreasurer = session?.user?.role === "treasurer" || session?.user?.role === "admin";
   const cy = params.year
     ? (await prisma.clubYear.findUnique({ where: { id: params.year } })) ?? (await getCurrentClubYear())
     : await getCurrentClubYear();
-  const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
-  const accounts = await prisma.account.findMany();
-  // Kategorien: globale + Kategorien dieses Clubjahres
-  const categories = await prisma.category.findMany({
-    where: { OR: [{ clubYearId: null }, { clubYearId: cy.id }] },
-    orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
-  });
-  // Mitglieder als Pulldown-Quelle
-  const members = await prisma.member.findMany({
-    where: { status: { not: "INACTIVE" } },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    select: { id: true, lastName: true, firstName: true },
-  });
+
+  // Alle Lookups parallel
+  const [allYears, accounts, categories, members] = await Promise.all([
+    prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } }),
+    prisma.account.findMany(),
+    prisma.category.findMany({
+      where: { OR: [{ clubYearId: null }, { clubYearId: cy.id }] },
+      orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    }),
+    prisma.member.findMany({
+      where: { status: { not: "INACTIVE" } },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      select: { id: true, lastName: true, firstName: true },
+    }),
+  ]);
   const accountFilter =
     params.account === "main" ? accounts.find((a) => a.type === "MAIN")
     : params.account === "gg" ? accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST")
@@ -53,24 +54,31 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     { note: { contains: params.q } },
   ];
 
-  const txs = await prisma.transaction.findMany({
-    where,
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: {
-      category: true,
-      account: true,
-      member: true,
-      attachment: true,
-      allocations: {
-        include: {
-          member: { select: { firstName: true, lastName: true } },
-          invoice: { select: { reference: true, status: true } },
+  // Hauptabfrage + aktuelle Salden parallel (Salden via groupBy in 1 Query)
+  const [txs, balanceForHeader] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      include: {
+        category: true,
+        account: true,
+        member: true,
+        attachment: true,
+        allocations: {
+          include: {
+            member: { select: { firstName: true, lastName: true } },
+            invoice: { select: { reference: true, status: true } },
+          },
+          orderBy: { partnerName: "asc" },
         },
-        orderBy: { partnerName: "asc" },
       },
-    },
-    take: 500,
-  });
+      take: 500,
+    }),
+    getAccountBalancesBatch({
+      clubYear: cy,
+      accounts: accounts.map((a) => ({ id: a.id, type: a.type as "MAIN" | "GLOBAL_GRANT_TRUST" })),
+    }),
+  ]);
 
   const totalIn = txs.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const totalOut = txs.filter((t) => t.amount < 0).reduce((s, t) => s + t.amount, 0);
@@ -82,13 +90,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     clubYearIds: [cy.id],
   });
 
-  // Aktuelle End-Salden (für Header-Karten)
   const mainAcc = accounts.find((a) => a.type === "MAIN");
   const ggAcc = accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST");
-  const [currentBalMain, currentBalGG] = await Promise.all([
-    mainAcc ? getAccountBalance(mainAcc.id, cy.id) : Promise.resolve(0),
-    ggAcc ? getAccountBalance(ggAcc.id, cy.id) : Promise.resolve(0),
-  ]);
+  const currentBalMain = mainAcc ? balanceForHeader.get(mainAcc.id) ?? 0 : 0;
+  const currentBalGG = ggAcc ? balanceForHeader.get(ggAcc.id) ?? 0 : 0;
 
   return (
     <div className="space-y-5 fade-up">

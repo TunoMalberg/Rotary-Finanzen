@@ -52,6 +52,43 @@ export async function getAccountBalance(accountId: string, clubYearId: string) {
   return opening + (sum._sum.amount ?? 0);
 }
 
+/**
+ * Liefert Salden für mehrere Konten desselben Clubjahrs in EINER DB-Query.
+ * Vermeidet N+1 (bisher: getAccountBalance × N → 3·N Queries).
+ *
+ * Argumente: bereits geladenes ClubYear (mit openingBalanceMain/GG) + Account-Liste
+ * (mit type). Liefert Map<accountId, balance>.
+ */
+export async function getAccountBalancesBatch(params: {
+  clubYear: { id: string; openingBalanceMain: number; openingBalanceGG: number };
+  accounts: Array<{ id: string; type: "MAIN" | "GLOBAL_GRANT_TRUST" }>;
+}): Promise<Map<string, number>> {
+  const { clubYear, accounts } = params;
+  const result = new Map<string, number>();
+  if (accounts.length === 0) return result;
+
+  // Eine Aggregat-Query, gruppiert nach accountId
+  const groups = await prisma.transaction.groupBy({
+    by: ["accountId"],
+    where: {
+      clubYearId: clubYear.id,
+      deletedAt: null,
+      accountId: { in: accounts.map((a) => a.id) },
+    },
+    _sum: { amount: true },
+  });
+  const sumMap = new Map(groups.map((g) => [g.accountId, g._sum.amount ?? 0]));
+
+  for (const acc of accounts) {
+    const opening =
+      acc.type === "MAIN"
+        ? clubYear.openingBalanceMain
+        : clubYear.openingBalanceGG;
+    result.set(acc.id, opening + (sumMap.get(acc.id) ?? 0));
+  }
+  return result;
+}
+
 export async function getCategoryTotals(clubYearId: string, accountType?: "MAIN" | "GLOBAL_GRANT_TRUST") {
   const where: { clubYearId: string; deletedAt: null; account?: { type: "MAIN" | "GLOBAL_GRANT_TRUST" } } = {
     clubYearId,

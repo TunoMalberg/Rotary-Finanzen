@@ -108,6 +108,9 @@ model Member {
   iban           String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@index([lastName, firstName])
 }
 
 model ImportBatch {
@@ -304,6 +307,9 @@ model Invoice {
   updatedAt         DateTime   @updatedAt
 
   @@index([paidTransactionId])
+  // Listenseiten /dues filtern stark nach (clubYearId, type, status, dueDate)
+  @@index([clubYearId, type, status])
+  @@index([clubYearId, type, status, dueDate])
 }
 
 /// Buchungs-Aufteilung – z. B. SEPA-Sammeleinzug aufgeteilt auf einzelne

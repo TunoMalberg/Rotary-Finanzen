@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getAccountBalance, getCategoryTotals, getCurrentClubYear } from "@/lib/dataAccess";
+import { getAccountBalancesBatch, getCategoryTotals, getCurrentClubYear } from "@/lib/dataAccess";
 import { computeRunningBalances } from "@/lib/runningBalance";
 import { getProjectTotals } from "@/lib/projectTotals";
 import { formatEUR, formatDate } from "@/lib/format";
@@ -12,43 +12,65 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const cy = await getCurrentClubYear();
-  const accounts = await prisma.account.findMany({ orderBy: { type: "asc" } });
+  const now = new Date();
+
+  // Alle unabhängigen Lookups parallel ausführen (vorher: ~12 sequenzielle Round-Trips)
+  const [
+    accounts,
+    totals,
+    allTotals,
+    openAgg,
+    overdueCount,
+    recent,
+    allCategories,
+    budgetLines,
+    projectTotals,
+  ] = await Promise.all([
+    prisma.account.findMany({ orderBy: { type: "asc" } }),
+    getCategoryTotals(cy.id, "MAIN"),
+    getCategoryTotals(cy.id),
+    prisma.invoice.aggregate({
+      where: { clubYearId: cy.id, status: { in: ["OPEN", "REMINDED"] } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.invoice.count({
+      where: { clubYearId: cy.id, status: { in: ["OPEN", "REMINDED"] }, dueDate: { lt: now } },
+    }),
+    prisma.transaction.findMany({
+      where: { clubYearId: cy.id, deletedAt: null },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      take: 8,
+      include: { category: true, account: true, member: true },
+    }),
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.budgetLine.findMany({ where: { clubYearId: cy.id } }),
+    getProjectTotals(),
+  ]);
   const main = accounts.find((a) => a.type === "MAIN")!;
   const gg = accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST")!;
-  const [balMain, balGG] = await Promise.all([
-    getAccountBalance(main.id, cy.id),
-    getAccountBalance(gg.id, cy.id),
-  ]);
-  const totals = await getCategoryTotals(cy.id, "MAIN");
+
+  // Saldi für beide Konten in EINER groupBy-Query
+  const balMap = await getAccountBalancesBatch({
+    clubYear: cy,
+    accounts: accounts.map((a) => ({ id: a.id, type: a.type as "MAIN" | "GLOBAL_GRANT_TRUST" })),
+  });
+  const balMain = balMap.get(main.id) ?? 0;
+  const balGG = balMap.get(gg.id) ?? 0;
+
   const income = totals.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const expense = totals.filter((t) => t.amount < 0).reduce((s, t) => s + t.amount, 0);
 
-  const openInvoices = await prisma.invoice.count({
-    where: { clubYearId: cy.id, status: { in: ["OPEN", "REMINDED"] } },
-  });
-  const openInvoicesAmount = await prisma.invoice.aggregate({
-    where: { clubYearId: cy.id, status: { in: ["OPEN", "REMINDED"] } },
-    _sum: { amount: true },
-  });
-  const overdueInvoices = await prisma.invoice.count({
-    where: { clubYearId: cy.id, status: { in: ["OPEN", "REMINDED"] }, dueDate: { lt: new Date() } },
-  });
+  const openInvoices = openAgg._count;
+  const openInvoicesAmount = openAgg._sum.amount ?? 0;
+  const overdueInvoices = overdueCount;
 
-  const recent = await prisma.transaction.findMany({
-    where: { clubYearId: cy.id, deletedAt: null },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    take: 8,
-    include: { category: true, account: true, member: true },
-  });
+  // Running balance für Recent (separat, weil von `recent` abhängig)
   const recentBalanceMap = await computeRunningBalances({
     accountIds: [...new Set(recent.map((t) => t.accountId))],
     clubYearIds: [cy.id],
   });
 
-  // Soll/Ist-Daten für Widget
-  const allCategories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
-  const budgetLines = await prisma.budgetLine.findMany({ where: { clubYearId: cy.id } });
-  const allTotals = await getCategoryTotals(cy.id);
   const sollIstRows: SollIstRow[] = allCategories.map((c) => {
     const line = budgetLines.find((l) => l.categoryId === c.id);
     const actual = allTotals.find((t) => t.id === c.id)?.amount ?? 0;
@@ -62,7 +84,6 @@ export default async function DashboardPage() {
     };
   });
 
-  const projectTotals = await getProjectTotals();
   const projectsIncome = projectTotals.reduce((s, p) => s + p.income, 0);
   const projectsExpense = projectTotals.reduce((s, p) => s + p.expense, 0);
   const projectsBalance = projectsIncome + projectsExpense;
@@ -127,7 +148,7 @@ export default async function DashboardPage() {
           <div>
             <div className="text-sm text-slate-500">Offene Forderungen</div>
             <div className="text-2xl font-bold mt-1">{openInvoices}</div>
-            <div className="text-sm text-slate-500 mt-1">{formatEUR(openInvoicesAmount._sum.amount ?? 0)}</div>
+            <div className="text-sm text-slate-500 mt-1">{formatEUR(openInvoicesAmount)}</div>
           </div>
           <Mail className="text-slate-400" />
         </div>

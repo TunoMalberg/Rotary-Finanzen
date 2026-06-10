@@ -21,8 +21,8 @@ import {
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { RotaryLogo } from "./RotaryLogo";
 
 type NavItem = {
@@ -66,11 +66,30 @@ const NAV: readonly NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isTreasurer = role === "treasurer" || role === "admin";
   const items = NAV.filter((n) => !n.treasurerOnly || isTreasurer);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const prefetched = useRef(new Set<string>());
+
+  // Prefetch alle Hauptmenü-Routen einmalig nach dem Mount – das warmt
+  // Layout + RSC-Payloads, sodass Klicks im Sidebar gefühlt instant sind.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      for (const it of items) {
+        if (prefetched.current.has(it.href)) continue;
+        try {
+          router.prefetch(it.href);
+          prefetched.current.add(it.href);
+        } catch {
+          /* prefetch ist best-effort */
+        }
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [items, router]);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -121,8 +140,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={n.href}
               href={n.href}
+              prefetch
               className={`sidebar-link ${active ? "active" : ""}`}
               aria-current={active ? "page" : undefined}
+              onMouseEnter={() => router.prefetch(n.href)}
             >
               <Icon className="size-4 shrink-0" />
               <span className="truncate">{n.label}</span>

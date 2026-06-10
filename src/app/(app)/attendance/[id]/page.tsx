@@ -8,30 +8,31 @@ import { AttendanceListEditor } from "./AttendanceListEditor";
 export const dynamic = "force-dynamic";
 
 export default async function AttendanceDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const session = await getServerSession(authOptions);
+  const [{ id }, session] = await Promise.all([params, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
-  const list = await prisma.attendanceList.findUnique({
-    where: { id },
-    include: {
-      clubYear: true,
-      category: true,
-      entries: {
-        include: { member: true, invoice: true },
-        orderBy: [{ member: { lastName: "asc" } }, { member: { firstName: "asc" } }],
+  const [list, allMembers] = await Promise.all([
+    prisma.attendanceList.findUnique({
+      where: { id },
+      include: {
+        clubYear: true,
+        category: true,
+        entries: {
+          include: { member: true, invoice: true },
+          orderBy: [{ member: { lastName: "asc" } }, { member: { firstName: "asc" } }],
+        },
       },
-    },
-  });
+    }),
+    prisma.member.findMany({
+      where: { status: { in: ["ACTIVE", "NON_MEMBER"] } },
+      orderBy: [{ status: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
+      select: { id: true, lastName: true, firstName: true, status: true, paysBySEPA: true },
+    }),
+  ]);
   if (!list) notFound();
   const isLocked = !!list.clubYear.lockedAt;
   const editable = canEdit && !isLocked;
 
   // Mitglieder-Auswahl für "Teilnehmer hinzufügen"
-  const allMembers = await prisma.member.findMany({
-    where: { status: { in: ["ACTIVE", "NON_MEMBER"] } },
-    orderBy: [{ status: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
-    select: { id: true, lastName: true, firstName: true, status: true, paysBySEPA: true },
-  });
   const inListMemberIds = new Set(list.entries.map((e) => e.memberId));
   const availableMembers = allMembers
     .filter((m) => !inListMemberIds.has(m.id))

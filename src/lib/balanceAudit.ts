@@ -57,8 +57,40 @@ export async function auditAccountBalances(): Promise<{
   duplicateCount: number;
   duplicateSum: number;
 }> {
-  const years = await prisma.clubYear.findMany({ orderBy: { startsAt: "asc" } });
-  const accounts = await prisma.account.findMany({ orderBy: { type: "asc" } });
+  // Alle drei Datenquellen parallel laden + ein einziger GroupBy für alle (account × year)-Kombinationen
+  const [years, accounts, groups, all] = await Promise.all([
+    prisma.clubYear.findMany({ orderBy: { startsAt: "asc" } }),
+    prisma.account.findMany({ orderBy: { type: "asc" } }),
+    prisma.transaction.groupBy({
+      by: ["accountId", "clubYearId"],
+      where: { deletedAt: null },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.transaction.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        accountId: true,
+        account: { select: { type: true } },
+        date: true,
+        amount: true,
+        counterparty: true,
+        purpose: true,
+        source: true,
+        externalRef: true,
+        importBatchId: true,
+      },
+    }),
+  ]);
+
+  const aggMap = new Map<string, { sum: number; count: number }>();
+  for (const g of groups) {
+    aggMap.set(`${g.accountId}|${g.clubYearId}`, {
+      sum: g._sum.amount ?? 0,
+      count: g._count,
+    });
+  }
 
   const rows: AccountAuditRow[] = [];
   for (const acc of accounts) {
@@ -67,12 +99,8 @@ export async function auditAccountBalances(): Promise<{
       const next = years[i + 1] ?? null;
       const isMain = acc.type === "MAIN";
       const opening = isMain ? yr.openingBalanceMain : yr.openingBalanceGG;
-      const sum = await prisma.transaction.aggregate({
-        where: { accountId: acc.id, clubYearId: yr.id, deletedAt: null },
-        _sum: { amount: true },
-        _count: true,
-      });
-      const movementsSum = sum._sum.amount ?? 0;
+      const agg = aggMap.get(`${acc.id}|${yr.id}`) ?? { sum: 0, count: 0 };
+      const movementsSum = agg.sum;
       const computedClosing = opening + movementsSum;
       const storedNextOpening = next
         ? isMain
@@ -95,7 +123,7 @@ export async function auditAccountBalances(): Promise<{
         accountName: acc.name,
         openingBalance: opening,
         movementsSum,
-        txCount: sum._count,
+        txCount: agg.count,
         computedClosing,
         expectedNextOpening,
         storedNextOpening,
@@ -104,35 +132,18 @@ export async function auditAccountBalances(): Promise<{
       });
     }
   }
-
-  // Duplikate suchen: pro Konto & Datum & Betrag mehr als 1 Buchung,
-  // mindestens eine ohne externalRef → wahrscheinlich doppelter Import.
-  const all = await prisma.transaction.findMany({
-    where: { deletedAt: null },
-    select: {
-      id: true,
-      accountId: true,
-      account: { select: { type: true } },
-      date: true,
-      amount: true,
-      counterparty: true,
-      purpose: true,
-      source: true,
-      externalRef: true,
-      importBatchId: true,
-    },
-  });
-  const groups = new Map<string, typeof all>();
+  // Duplikate-Erkennung nutzt `all` (oben bereits geladen):
+  const dupGroups = new Map<string, typeof all>();
   for (const t of all) {
     const key = `${t.accountId}|${t.date.toISOString().slice(0, 10)}|${t.amount.toFixed(2)}`;
-    const arr = groups.get(key) ?? [];
+    const arr = dupGroups.get(key) ?? [];
     arr.push(t);
-    groups.set(key, arr);
+    dupGroups.set(key, arr);
   }
   const duplicates: DuplicateGroup[] = [];
   let duplicateCount = 0;
   let duplicateSum = 0;
-  for (const [, arr] of groups) {
+  for (const [, arr] of dupGroups) {
     if (arr.length < 2) continue;
     const hasNoRef = arr.some((t) => !t.externalRef);
     const hasRef = arr.some((t) => t.externalRef);

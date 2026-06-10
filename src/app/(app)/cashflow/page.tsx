@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentClubYear, getAccountBalance } from "@/lib/dataAccess";
+import { getCurrentClubYear, getAccountBalancesBatch } from "@/lib/dataAccess";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { CashflowView } from "./CashflowView";
@@ -10,21 +10,27 @@ import { TrendingUp } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function CashflowPage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
-  const params = await searchParams;
-  const session = await getServerSession(authOptions);
+  const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
   const cy = params.year
     ? (await prisma.clubYear.findUnique({ where: { id: params.year } })) ?? (await getCurrentClubYear())
     : await getCurrentClubYear();
-  const allYears = await prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } });
 
-  const main = await prisma.account.findFirst({ where: { type: "MAIN" } });
-  const gg = await prisma.account.findFirst({ where: { type: "GLOBAL_GRANT_TRUST" } });
-  const balMain = main ? await getAccountBalance(main.id, cy.id) : 0;
-  const balGG = gg ? await getAccountBalance(gg.id, cy.id) : 0;
+  const [allYears, accounts, entries] = await Promise.all([
+    prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } }),
+    prisma.account.findMany({ where: { type: { in: ["MAIN", "GLOBAL_GRANT_TRUST"] } }, select: { id: true, type: true } }),
+    prisma.cashflowEntry.findMany({ where: { clubYearId: cy.id }, orderBy: { date: "asc" } }),
+  ]);
+
+  const balMap = await getAccountBalancesBatch({
+    clubYear: cy,
+    accounts: accounts.map((a) => ({ id: a.id, type: a.type as "MAIN" | "GLOBAL_GRANT_TRUST" })),
+  });
+  const main = accounts.find((a) => a.type === "MAIN");
+  const gg = accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST");
+  const balMain = main ? balMap.get(main.id) ?? 0 : 0;
+  const balGG = gg ? balMap.get(gg.id) ?? 0 : 0;
   const startBalance = balMain + balGG;
-
-  const entries = await prisma.cashflowEntry.findMany({ where: { clubYearId: cy.id }, orderBy: { date: "asc" } });
 
   return (
     <div className="space-y-5 fade-up">
