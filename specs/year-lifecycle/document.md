@@ -76,6 +76,16 @@ OPEN → CLOSED → AUDITED → LOCKED
 - [x] Archiv-Seite zeigt alle Lifecycle-Aktionen je nach Status.
 - [x] Soll/Ist-Widget auf Dashboard sichtbar.
 
+## Fix (Juli 2026): Jahreswechsel, Fixieren-500, Storno-Saldo
+Nach dem ersten realen Jahreswechsel (30.6.) traten vier Punkte auf, die hier behoben wurden:
+
+1. **Buchungen folgen strikt dem Datum (1.7.–30.6.).**
+   `src/lib/clubYearLifecycle.ts` erhielt `clubYearBoundsForDate(date)` (reine Berechnung: Monat ≥ Juli → Jahr Y/Y+1) und `ensureClubYearForDate(date)` (liefert bzw. legt das Zieljahr an, mit Eröffnungssaldo-Übernahme aus dem Vorjahr). Anlegen (`POST /api/transactions`), Bearbeiten (`PATCH /api/transactions/:id`) und Bank-Import (`/api/import/george`) bestimmen das Clubjahr jetzt ausschließlich aus dem Buchungsdatum. Juli-Buchungen landen automatisch im neuen Jahr.
+2. **Jahr beim Bearbeiten änderbar.** Das Bearbeiten-Formular (`TxForm`) synchronisiert die Clubjahr-Auswahl mit dem Datum und sendet `allowCorrection: true`; der PATCH-Endpunkt bucht bei geändertem Datum/Jahr in das Zieljahr um (mit Lifecycle-Prüfung auf dem Zieljahr). Fehlermeldungen werden jetzt im Klartext angezeigt.
+3. **Fixieren-500 behoben.** `lock/route.ts` und `archive-file/route.ts` schrieben/lasen über `fs` nach `process.cwd()/uploads` – auf Vercel read-only ⇒ HTTP 500. Migriert auf `blobStorage.ts` (Vercel Blob). Zusätzlich ist der Archiv-Upload jetzt **best-effort**: schlägt er fehl, wird das Jahr trotzdem fixiert (kein 500 mehr).
+4. **Storno passt Saldo an.** `TransactionsTable` sendet beim Löschen/Inline-Edit `?correction=1`/`allowCorrection` und prüft die Antwort. Vorher schlug ein 409 (abgeschlossenes/geprüftes Jahr) still fehl – die Buchung blieb erhalten und der Kontostand änderte sich nicht.
+5. **Reparatur-Tool** für Altbestände: `POST /api/accounts/reassign-years` (+ UI `ReassignYearsTool` auf `/accounts`) ordnet vorhandene Buchungen dem datumsrichtigen Jahr zu (Vorschau/dry-run; fixierte Jahre bleiben unangetastet).
+
 ## Implementation notes
 - `src/lib/earExcel.ts` enthält den Export- und Parser-Code.
 - Kategorie-Mapping für Re-Import nutzt sign-abhängige Zuordnung (RYLA/Spenden/Sonstiges können sowohl Einnahmen- als auch Ausgaben-Spalte sein).
