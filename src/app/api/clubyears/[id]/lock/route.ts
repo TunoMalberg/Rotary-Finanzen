@@ -62,15 +62,26 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // schreiben, sondern über den Blob-Adapter (Vercel Blob bzw. lokaler
   // Fallback). Der zurückgegebene storagePath (URL bzw. local://…) wird in
   // ArchivedYear.fileName gespeichert und vom archive-file-Endpunkt gelesen.
+  //
+  // WICHTIG: Best-effort. Das Fixieren des Clubjahres (Beschluss der
+  // Mitgliederversammlung) darf NIEMALS an der Archiv-Datei scheitern.
+  // Sollte der Blob-Upload fehlschlagen (z. B. weil noch kein Blob-Store
+  // verbunden ist), wird das Jahr trotzdem fixiert; die Datei kann später
+  // nachgeneriert werden. Früher führte ein fs-Write hier zu HTTP 500.
   const fileName = `EAR Rotary Wien Donau ${cy.label.replace("/", "-")} (Archiv).xlsx`;
-  const stored = await uploadBlob({
-    fileName,
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    data: buf,
-    keyPrefix: "archive/",
-  });
-  const archiveRel = stored.storagePath;
+  let archiveRel: string | null = null;
+  try {
+    const stored = await uploadBlob({
+      fileName,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      data: buf,
+      keyPrefix: "archive/",
+    });
+    archiveRel = stored.storagePath;
+  } catch (e) {
+    console.error("[lock] Archiv-Upload fehlgeschlagen (Jahr wird trotzdem fixiert):", e);
+  }
 
   // Snapshot summary
   const income: Record<string, number> = {};
