@@ -25,7 +25,7 @@ function ResetInner() {
       setTokenValid(false);
       return;
     }
-    fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
+    fetch(`/api/password/reset?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
       .then((j) => {
         if (!active) return;
@@ -50,7 +50,7 @@ function ResetInner() {
       return;
     }
     setLoading(true);
-    const res = await fetch("/api/auth/reset-password", {
+    const res = await fetch("/api/password/reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),

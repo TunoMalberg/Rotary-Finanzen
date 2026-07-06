@@ -52,8 +52,8 @@ model PasswordResetToken {
 ```
 
 ## API contracts
-- `POST /api/auth/forgot-password`  Body `{ email }` → immer `200 { ok: true }` (generisch).
-- `POST /api/auth/reset-password`   Body `{ token, password }` →
+- `POST /api/password/forgot`  Body `{ email }` → immer `200 { ok: true }` (generisch).
+- `POST /api/password/reset`   Body `{ token, password }` →
   - `200 { ok: true }` bei Erfolg
   - `400 { error }` bei zu kurzem Passwort
   - `410 { error }` bei ungültigem/abgelaufenem/genutztem Token
