@@ -3,9 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { buildEarWorkbook } from "@/lib/earExcel";
+import { uploadBlob } from "@/lib/blobStorage";
 import * as XLSX from "xlsx";
-import path from "node:path";
-import fs from "node:fs/promises";
 
 /**
  * POST /api/clubyears/:id/lock
@@ -58,11 +57,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   });
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-  const dir = path.join(process.cwd(), "uploads", "archive");
-  await fs.mkdir(dir, { recursive: true });
+  // Archiv-Excel persistent ablegen. Auf Vercel ist das Dateisystem read-only
+  // (nur /tmp ist beschreibbar), daher NICHT mehr per fs in process.cwd()
+  // schreiben, sondern über den Blob-Adapter (Vercel Blob bzw. lokaler
+  // Fallback). Der zurückgegebene storagePath (URL bzw. local://…) wird in
+  // ArchivedYear.fileName gespeichert und vom archive-file-Endpunkt gelesen.
   const fileName = `EAR Rotary Wien Donau ${cy.label.replace("/", "-")} (Archiv).xlsx`;
-  const archiveRel = path.join("archive", fileName);
-  await fs.writeFile(path.join(dir, fileName), buf);
+  const stored = await uploadBlob({
+    fileName,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    data: buf,
+    keyPrefix: "archive/",
+  });
+  const archiveRel = stored.storagePath;
 
   // Snapshot summary
   const income: Record<string, number> = {};

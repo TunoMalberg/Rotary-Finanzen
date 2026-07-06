@@ -71,7 +71,10 @@ export function TransactionsTable({
     const res = await fetch(`/api/transactions/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      // allowCorrection: Schatzmeister darf auch in abgeschlossenen/geprüften
+      // (nicht fixierten) Jahren korrigieren – z. B. eine falsch zugeordnete
+      // Juli-Buchung ins richtige rotarische Jahr umbuchen.
+      body: JSON.stringify({ allowCorrection: true, ...body }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -84,9 +87,24 @@ export function TransactionsTable({
   async function del(id: string) {
     if (!confirm("Buchung wirklich stornieren?")) return;
     setBusy(id);
-    await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-    setBusy(null);
-    router.refresh();
+    try {
+      // correction=1: erlaubt dem Schatzmeister das Stornieren auch in bereits
+      // abgeschlossenen/geprüften (aber nicht fixierten) Clubjahren. Ohne dieses
+      // Flag lieferte der Endpunkt still ein 409 zurück – die Buchung blieb
+      // erhalten und der Kontostand änderte sich nicht.
+      const res = await fetch(`/api/transactions/${id}?correction=1`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.error ?? `Stornieren fehlgeschlagen (HTTP ${res.status}).`);
+        return;
+      }
+      // Server-Komponente neu laden → Kontostände + laufender Saldo aktualisieren.
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
   }
 
   const categoryOptions = categories.map((c) => ({

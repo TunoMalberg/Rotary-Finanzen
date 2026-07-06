@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
-import { checkClubYearMutable } from "@/lib/clubYearLifecycle";
+import { checkClubYearMutable, ensureClubYearForDate } from "@/lib/clubYearLifecycle";
 
 async function loadTxAndYear(id: string) {
   const tx = await prisma.transaction.findUnique({ where: { id }, include: { clubYear: true } });
@@ -33,7 +33,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const guard = checkClubYearMutable(tx.clubYear, { role: session?.user?.role, allowCorrection: !!body.allowCorrection });
   if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 409 });
   const data: Record<string, unknown> = {};
-  if (body.date) data.date = new Date(body.date);
+  const newDate = body.date ? new Date(body.date) : null;
+  if (newDate) data.date = newDate;
   if (body.counterparty !== undefined) data.counterparty = body.counterparty;
   if (body.purpose !== undefined) data.purpose = body.purpose;
   if (body.note !== undefined) data.note = body.note;
@@ -42,6 +43,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.memberId !== undefined) data.memberId = body.memberId || null;
   if (body.projectId !== undefined) data.projectId = body.projectId || null;
   if (body.attachmentId !== undefined) data.attachmentId = body.attachmentId || null;
+
+  // Clubjahr-Zuordnung: explizit gewähltes Jahr hat Vorrang, sonst folgt das
+  // Jahr automatisch dem (neuen) Buchungsdatum – so landen Buchungen immer im
+  // korrekten rotarischen Jahr (1.7.–30.6.).
+  let targetYearId: string | null = null;
+  if (body.clubYearId) {
+    const chosen = await prisma.clubYear.findUnique({ where: { id: body.clubYearId } });
+    if (!chosen) return NextResponse.json({ error: "Clubjahr nicht gefunden" }, { status: 400 });
+    targetYearId = chosen.id;
+  } else if (newDate) {
+    const resolved = await ensureClubYearForDate(newDate);
+    targetYearId = resolved.id;
+  }
+
+  if (targetYearId && targetYearId !== tx.clubYearId) {
+    // In das Zieljahr darf gebucht werden?
+    const target = await prisma.clubYear.findUnique({ where: { id: targetYearId } });
+    if (!target) return NextResponse.json({ error: "Clubjahr nicht gefunden" }, { status: 400 });
+    const targetGuard = checkClubYearMutable(target, {
+      role: session?.user?.role,
+      allowCorrection: !!body.allowCorrection,
+    });
+    if (!targetGuard.ok) return NextResponse.json({ error: targetGuard.reason }, { status: 409 });
+    data.clubYearId = targetYearId;
+  }
+
   const out = await prisma.transaction.update({ where: { id }, data });
   return NextResponse.json(out);
 }

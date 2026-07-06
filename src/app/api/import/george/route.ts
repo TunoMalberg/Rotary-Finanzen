@@ -1,4 +1,5 @@
 import { authOptions, isTreasurer } from "@/lib/auth";
+import { ensureClubYearForDate, clubYearBoundsForDate } from "@/lib/clubYearLifecycle";
 import { parseBankFile } from "@/lib/bankImport";
 import { autoCategoryName, rankCategories } from "@/lib/categorize";
 import { prisma } from "@/lib/prisma";
@@ -199,10 +200,29 @@ async function handle(req: Request) {
     return `${date.toISOString()}|${amount}|${externalRef ?? ""}|${h}`;
   }
 
+  // Clubjahr-Auflösung je Zeile anhand des Buchungsdatums (1.7.–30.6.).
+  // Fehlende (Folge-)Jahre werden bei echten Importen automatisch mit
+  // Saldo-Übernahme angelegt; Buchungen in bereits fixierte Jahre werden
+  // übersprungen. Cache pro Jahres-Label, um DB-Roundtrips zu sparen.
+  const yearCache = new Map<
+    string,
+    { id: string; label: string; lockedAt: Date | null }
+  >();
+  async function resolveYearForRow(date: Date) {
+    const { label } = clubYearBoundsForDate(date);
+    const cached = yearCache.get(label);
+    if (cached) return cached;
+    const y = await ensureClubYearForDate(date);
+    const entry = { id: y.id, label: y.label, lockedAt: y.lockedAt };
+    yearCache.set(label, entry);
+    return entry;
+  }
+
   const preview: PreviewRow[] = [];
   let created = 0;
   let duplicates = 0;
   let skippedOlder = 0;
+  let skippedLocked = 0;
   let autoMatched = 0;
 
   for (const r of rows) {
@@ -406,11 +426,34 @@ async function handle(req: Request) {
       }
     }
 
+    // Zieljahr strikt nach Buchungsdatum bestimmen.
+    const rowYear = await resolveYearForRow(r.date);
+    // In fixierte Jahre wird nicht importiert – Zeile überspringen.
+    if (rowYear.lockedAt) {
+      skippedLocked++;
+      preview.push({
+        rowKey,
+        date: r.date.toISOString(),
+        counterparty,
+        purpose,
+        amount: r.amount,
+        category: null,
+        suggestedCategoryId: null,
+        suggestions: [],
+        isDuplicate: false,
+        isSkippedOlder: false,
+        matchedMember: null,
+        externalRef,
+      });
+      continue;
+    }
+    const rowClubYearId = rowYear.id;
+
     if (!dryRun) {
       const txn = await prisma.transaction.create({
         data: {
           accountId,
-          clubYearId,
+          clubYearId: rowClubYearId,
           date: r.date,
           valueDate: r.valueDate,
           counterparty,
@@ -430,7 +473,7 @@ async function handle(req: Request) {
         const inv = await prisma.invoice.findFirst({
           where: {
             memberId,
-            clubYearId,
+            clubYearId: rowClubYearId,
             status: { in: ["OPEN", "REMINDED"] },
             amount: r.amount,
           },
@@ -482,6 +525,7 @@ async function handle(req: Request) {
     created,
     duplicates,
     skippedOlder,
+    skippedLocked,
     autoMatched,
     lastExistingDate: lastDate ? lastDate.toISOString() : null,
     importAll,

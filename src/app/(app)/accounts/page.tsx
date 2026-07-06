@@ -7,6 +7,7 @@ import Link from "next/link";
 import { OpeningBalanceEditor } from "./OpeningBalanceEditor";
 import { DuplicateResolver } from "./DuplicateResolver";
 import { ReconcileTool } from "./ReconcileTool";
+import { ReassignYearsTool } from "./ReassignYearsTool";
 import { prisma } from "@/lib/prisma";
 import { getCurrentClubYear } from "@/lib/dataAccess";
 
@@ -244,6 +245,27 @@ export default async function AccountsPage() {
           </div>
         )}
       </section>
+
+      {/* Clubjahr-Zuordnung reparieren */}
+      {canEdit && (
+        <section className="card-soft overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 border-b">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Wallet className="size-4 text-blue-700" />
+              Clubjahr-Zuordnung prüfen &amp; reparieren
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Ordnet jede Buchung dem rotarischen Jahr (1.7.–30.6.) zu, in das
+              ihr Buchungsdatum fällt. Damit werden z.&nbsp;B. Juli-Buchungen,
+              die noch fälschlich im alten Jahr hingen, ins richtige neue Jahr
+              verschoben. Fixierte (archivierte) Jahre bleiben unverändert.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            <ReassignYearsTool />
+          </div>
+        </section>
+      )}
 
       {/* Bank-Abgleich Tool */}
       {canEdit && (

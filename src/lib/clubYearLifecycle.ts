@@ -110,6 +110,77 @@ export async function getClubYearForDate(date: Date) {
   });
 }
 
+/**
+ * Berechnet Label + Grenzen des rotarischen Clubjahres (1.7.–30.6.),
+ * in dem das Datum liegt. Rein rechnerisch, ohne DB.
+ *   Monat Juli (Index 6) bis Dezember → Jahr Y beginnt das Clubjahr Y/Y+1.
+ *   Monat Jänner bis Juni → das Datum gehört zum Clubjahr (Y-1)/Y.
+ */
+export function clubYearBoundsForDate(date: Date): {
+  label: string;
+  startsAt: Date;
+  endsAt: Date;
+} {
+  const y = date.getUTCFullYear();
+  const m = date.getUTCMonth(); // 0-basiert; 6 = Juli
+  const startYear = m >= 6 ? y : y - 1;
+  return {
+    label: `${startYear}/${startYear + 1}`,
+    startsAt: new Date(Date.UTC(startYear, 6, 1)), // 1.7.
+    endsAt: new Date(Date.UTC(startYear + 1, 5, 30, 23, 59, 59)), // 30.6.
+  };
+}
+
+/**
+ * Liefert das Clubjahr für ein Datum und legt es – falls es noch nicht
+ * existiert – automatisch an. Die Eröffnungssalden des neuen Jahres werden
+ * aus dem Schlusssaldo des unmittelbaren Vorjahres übernommen (Übernahme).
+ *
+ * Damit landen z. B. Juli-Buchungen nach dem 30.6. automatisch im neuen
+ * rotarischen Jahr, statt fälschlich im alten.
+ */
+export async function ensureClubYearForDate(date: Date) {
+  const existing = await getClubYearForDate(date);
+  if (existing) return existing;
+
+  const { label, startsAt, endsAt } = clubYearBoundsForDate(date);
+  const already = await prisma.clubYear.findUnique({ where: { label } });
+  if (already) return already;
+
+  // Eröffnungssalden = Schlusssalden des Vorjahres (Übernahme).
+  const prev = await prisma.clubYear.findFirst({
+    where: { endsAt: { lt: startsAt } },
+    orderBy: { endsAt: "desc" },
+  });
+  let openingBalanceMain = 0;
+  let openingBalanceGG = 0;
+  if (prev) {
+    const accounts = await prisma.account.findMany({
+      select: { id: true, type: true },
+    });
+    const main = accounts.find((a) => a.type === "MAIN");
+    const gg = accounts.find((a) => a.type === "GLOBAL_GRANT_TRUST");
+    if (main) {
+      const s = await prisma.transaction.aggregate({
+        where: { accountId: main.id, clubYearId: prev.id, deletedAt: null },
+        _sum: { amount: true },
+      });
+      openingBalanceMain = prev.openingBalanceMain + (s._sum.amount ?? 0);
+    }
+    if (gg) {
+      const s = await prisma.transaction.aggregate({
+        where: { accountId: gg.id, clubYearId: prev.id, deletedAt: null },
+        _sum: { amount: true },
+      });
+      openingBalanceGG = prev.openingBalanceGG + (s._sum.amount ?? 0);
+    }
+  }
+
+  return prisma.clubYear.create({
+    data: { label, startsAt, endsAt, openingBalanceMain, openingBalanceGG },
+  });
+}
+
 export async function ensureCurrentClubYear() {
   const today = new Date();
   const cy = await getClubYearForDate(today);

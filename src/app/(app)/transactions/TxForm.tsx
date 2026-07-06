@@ -53,6 +53,26 @@ export function TxForm({
   });
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
 
+  // Rotarisches Clubjahr (1.7.–30.6.) aus einem ISO-Datum ableiten und – falls
+  // vorhanden – das passende Clubjahr in der Auswahl setzen. So folgt die
+  // Jahres-Zuordnung automatisch dem Datum (z. B. rutscht der 2.7. ins neue
+  // Jahr). Der Nutzer kann das Jahr danach weiterhin manuell übersteuern.
+  function clubYearIdForDate(dateStr: string): string | undefined {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return undefined;
+    const y = d.getUTCFullYear();
+    const startYear = d.getUTCMonth() >= 6 ? y : y - 1; // Monat 6 = Juli
+    const label = `${startYear}/${startYear + 1}`;
+    return clubYears.find((cy) => cy.label === label)?.id;
+  }
+
+  function onDateChange(dateStr: string) {
+    setForm((f) => {
+      const matched = clubYearIdForDate(dateStr);
+      return { ...f, date: dateStr, clubYearId: matched ?? f.clubYearId };
+    });
+  }
+
   async function uploadAttachment(file: File) {
     const fd = new FormData();
     fd.append("file", file);
@@ -76,11 +96,18 @@ export function TxForm({
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, amount: Number(form.amount.replace(",", ".")) }),
+      body: JSON.stringify({
+        ...form,
+        amount: Number(form.amount.replace(",", ".")),
+        // Schatzmeister-Korrektur auch in abgeschlossenen/geprüften (nicht
+        // fixierten) Jahren erlauben – sonst schlägt das Umbuchen fehl.
+        allowCorrection: true,
+      }),
     });
     setSaving(false);
     if (!res.ok) {
-      setError("Speichern fehlgeschlagen.");
+      const err = await res.json().catch(() => ({}));
+      setError(err?.error ?? "Speichern fehlgeschlagen.");
       return;
     }
     router.push("/transactions");
@@ -92,7 +119,7 @@ export function TxForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">Datum</label>
-          <input type="date" className="input" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          <input type="date" className="input" value={form.date} onChange={(e) => onDateChange(e.target.value)} required />
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">Konto</label>
