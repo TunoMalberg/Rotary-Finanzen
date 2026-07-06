@@ -15,9 +15,25 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
-  role         String   @default("president") // 'treasurer' | 'president' | 'admin'
+  role         String   @default("president") // 'treasurer' | 'president' | 'admin' | 'auditor'
   passwordHash String
   createdAt    DateTime @default(now())
+  resetTokens  PasswordResetToken[]
+}
+
+/// Einmalige, kurzlebige Tokens für Self-Service-Passwort-Reset.
+/// Es wird nur der SHA-256-Hash des Rohtokens gespeichert.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Account {
