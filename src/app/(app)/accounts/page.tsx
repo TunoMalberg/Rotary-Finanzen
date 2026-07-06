@@ -252,13 +252,15 @@ export default async function AccountsPage() {
           <div className="px-4 sm:px-5 py-3 border-b">
             <h2 className="font-semibold flex items-center gap-2">
               <Wallet className="size-4 text-blue-700" />
-              Clubjahr-Zuordnung prüfen &amp; reparieren
+              Kontostand reparieren (Jahreszuordnung &amp; Übernahme)
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Ordnet jede Buchung dem rotarischen Jahr (1.7.–30.6.) zu, in das
-              ihr Buchungsdatum fällt. Damit werden z.&nbsp;B. Juli-Buchungen,
-              die noch fälschlich im alten Jahr hingen, ins richtige neue Jahr
-              verschoben. Fixierte (archivierte) Jahre bleiben unverändert.
+              <b>Schritt 1</b> ordnet jede Buchung dem rotarischen Jahr
+              (1.7.–30.6.) zu, in das ihr Datum fällt (z.&nbsp;B. Juli-Buchungen
+              ins richtige Jahr). <b>Schritt 2</b> setzt die
+              Eröffnungssaldo-Übernahme zwischen den Jahren wieder konsistent.
+              Zusammen korrigieren sie einen falschen Kontostand z.&nbsp;B. per
+              30.6. Fixierte (archivierte) Jahre bleiben unverändert.
             </p>
           </div>
           <div className="p-4 sm:p-5">
