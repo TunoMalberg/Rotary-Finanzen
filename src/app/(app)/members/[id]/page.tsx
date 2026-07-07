@@ -5,6 +5,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Link from "next/link";
 import { MemberEditForm } from "./MemberEditForm";
+import { MemberRowActions } from "../MemberRowActions";
 
 export const dynamic = "force-dynamic";
 
@@ -98,8 +99,19 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/members" className="btn-ghost">← Zurück zur Liste</Link>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Archivieren / Löschen:</span>
+            <MemberRowActions
+              memberId={m.id}
+              memberName={`${m.lastName}, ${m.firstName}`}
+              isInactive={m.status === "INACTIVE"}
+              afterDeleteHref="/members"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Users, Upload } from "lucide-react";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
+import { MemberRowActions } from "./MemberRowActions";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                   <th>Methode</th>
                   <th>Status</th>
                   <th className="text-right">Beitrag</th>
+                  {canEdit && <th><span className="sr-only">Aktionen</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -137,10 +139,19 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                             : <span className="chip chip-cancelled">{m.status}</span>}
                     </td>
                     <td data-label="Beitrag" className="text-right font-mono tabular">{formatEUR(m.duesAmount)}</td>
+                    {canEdit && (
+                      <td data-label="Aktionen" className="text-right">
+                        <MemberRowActions
+                          memberId={m.id}
+                          memberName={`${m.lastName}, ${m.firstName}`}
+                          isInactive={m.status === "INACTIVE"}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {members.length === 0 && (
-                  <tr><td colSpan={8} className="text-center text-slate-500 py-12 no-stack-label">Keine Mitglieder gefunden.</td></tr>
+                  <tr><td colSpan={canEdit ? 9 : 8} className="text-center text-slate-500 py-12 no-stack-label">Keine Mitglieder gefunden.</td></tr>
                 )}
               </tbody>
             </table>
