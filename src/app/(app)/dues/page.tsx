@@ -120,7 +120,7 @@ export default async function DuesPage({ searchParams }: { searchParams: Promise
                       <td data-label="Betrag" className="text-right tabular font-mono">{formatEUR(i.amount)}</td>
                       {canEdit && (
                         <td data-label="Aktionen" className="text-right">
-                          <DuesRowActions invoice={{ id: i.id, status: i.status, memberEmail: i.member.email, memberName: `${i.member.firstName} ${i.member.lastName}`, amount: i.amount, reference: i.reference, dueDate: i.dueDate.toISOString(), reminderLevel: i.reminderLevel, paymentMethod: i.paymentMethod }} />
+                          <DuesRowActions invoice={{ id: i.id, status: i.status, memberEmail: i.member.email, memberName: `${i.member.firstName} ${i.member.lastName}`, amount: i.amount, reference: i.reference, dueDate: i.dueDate.toISOString(), reminderLevel: i.reminderLevel, paymentMethod: i.paymentMethod, invoiceSentAt: i.invoiceSentAt ? i.invoiceSentAt.toISOString() : null }} />
                         </td>
                       )}
                     </tr>

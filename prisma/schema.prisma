@@ -313,6 +313,7 @@ model Invoice {
   paymentMethod     String     // SEPA | EMAIL_INVOICE
   reminderLevel     Int        @default(0)
   lastReminderAt    DateTime?
+  invoiceSentAt     DateTime?  // Zeitpunkt des (Erst-)Rechnungsversands per E-Mail
   paidTransactionId String?
   paidTransaction   Transaction? @relation("PaidByTx", fields: [paidTransactionId], references: [id])
   paidAt            DateTime?

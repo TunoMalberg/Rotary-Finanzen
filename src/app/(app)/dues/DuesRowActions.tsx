@@ -1,10 +1,10 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Mail, Check, Loader2, RotateCcw, Pencil, Trash2, X } from "lucide-react";
+import { Mail, Check, Loader2, RotateCcw, Pencil, Trash2, X, Send } from "lucide-react";
 import { formatEUR, formatDate } from "@/lib/format";
 
-export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string } }) {
+export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string; invoiceSentAt: string | null } }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -75,6 +75,21 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     return mail;
   }
 
+  async function sendInvoice() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send-invoice`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(d?.error ?? `Fehler ${res.status}`);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remind() {
     setBusy(true);
     // log reminder, then open mail client
@@ -127,6 +142,16 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex justify-end gap-1 flex-wrap">
+        {invoice.paymentMethod === "EMAIL_INVOICE" && (
+          <button
+            onClick={sendInvoice}
+            disabled={busy}
+            className="btn-ghost text-xs px-2 py-1"
+            title={invoice.invoiceSentAt ? `Rechnung erneut senden (zuletzt ${formatDate(invoice.invoiceSentAt)})` : "Rechnung per E-Mail senden"}
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} {invoice.invoiceSentAt ? "Erneut" : "Rechnung"}
+          </button>
+        )}
         <button onClick={remind} disabled={busy} className="btn-ghost text-xs px-2 py-1" title="Mahn-Mail senden">
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />} Mahnen
         </button>
