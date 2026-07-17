@@ -2,6 +2,7 @@
 import {
   Archive,
   Banknote,
+  DatabaseBackup,
   FolderKanban,
   Inbox,
   LayoutDashboard,
@@ -60,6 +61,12 @@ const NAV: readonly NavItem[] = [
     href: "/settings/users",
     label: "Benutzer",
     icon: Settings,
+    treasurerOnly: true,
+  },
+  {
+    href: "/settings/backup",
+    label: "Backup",
+    icon: DatabaseBackup,
     treasurerOnly: true,
   },
 ] as const;
