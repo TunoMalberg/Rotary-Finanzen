@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hablamos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Lora:ital,wght@0,500;0,600;1,500&display=swap">
+<style>
+:root{
+  --bg:#F5F2E9; --surface:#FFFFFF; --surface2:#ECE7D9; --ink:#22312F; --muted:#66736E;
+  --line:#DCD5C4; --sea:#14606B; --sea-deep:#0E4A53; --on-sea:#F2EFE6; --sun:#DB9A2B;
+  --ok:#4E7A3A; --ok-bg:#E7EEDD; --err:#B4553F; --err-bg:#F3E2DB; --focus:#DB9A2B;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101A19; --surface:#1A2523; --surface2:#223030; --ink:#E9E4D5; --muted:#93A09A;
+    --line:#2E3D3B; --sea:#57B1B7; --sea-deep:#7FCBCF; --on-sea:#0E1A19; --sun:#E5B054;
+    --ok:#8FBF6F; --ok-bg:#22301F; --err:#D98A76; --err-bg:#382019; --focus:#E5B054;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101A19; --surface:#1A2523; --surface2:#223030; --ink:#E9E4D5; --muted:#93A09A;
+  --line:#2E3D3B; --sea:#57B1B7; --sea-deep:#7FCBCF; --on-sea:#0E1A19; --sun:#E5B054;
+  --ok:#8FBF6F; --ok-bg:#22301F; --err:#D98A76; --err-bg:#382019; --focus:#E5B054;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.5; min-height:100vh;
+}
+button{font:inherit; color:inherit; cursor:pointer; border:none; background:none}
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--focus); outline-offset:2px;
+}
+.app{max-width:640px; margin:0 auto; padding:0 16px 48px}
+
+/* ── Kopf ─────────────────────────── */
+header.top{padding:20px 0 12px; display:flex; align-items:baseline; justify-content:space-between; gap:12px}
+.brand{font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif; font-weight:700; font-size:1.7rem; letter-spacing:-.02em}
+.brand .punct{color:var(--sun)}
+.stats{display:flex; gap:14px; font-size:.82rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+.stats b{color:var(--ink); font-weight:600}
+
+/* ── Tabs ─────────────────────────── */
+nav.tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:20px}
+nav.tabs button{
+  padding:9px 14px; font-weight:600; font-size:.92rem; color:var(--muted);
+  border-bottom:2px solid transparent; margin-bottom:-1px; border-radius:6px 6px 0 0;
+}
+nav.tabs button[aria-selected="true"]{color:var(--sea); border-bottom-color:var(--sea)}
+nav.tabs button:hover{color:var(--ink)}
+
+/* ── Trainings-Setup ──────────────── */
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px}
+.panel h2{font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:1.15rem; margin:0 0 4px; text-wrap:balance}
+.panel .sub{color:var(--muted); font-size:.9rem; margin:0 0 16px}
+.fieldlabel{font-size:.78rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 8px}
+.chiprow{display:flex; flex-wrap:wrap; gap:8px}
+.chip{
+  padding:7px 13px; border-radius:999px; border:1px solid var(--line); background:var(--surface);
+  font-size:.88rem; font-weight:500; transition:background .12s,border-color .12s;
+}
+.chip[aria-pressed="true"]{background:var(--sea); border-color:var(--sea); color:var(--on-sea)}
+.modes{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+@media (max-width:460px){.modes{grid-template-columns:1fr}}
+.mode{
+  text-align:left; border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:var(--surface);
+}
+.mode[aria-pressed="true"]{border-color:var(--sea); box-shadow:inset 0 0 0 1px var(--sea)}
+.mode b{display:block; font-size:.95rem}
+.mode span{font-size:.82rem; color:var(--muted)}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:12px 22px; border-radius:12px; font-weight:600; font-size:1rem;
+  background:var(--sea); color:var(--on-sea); transition:filter .12s;
+}
+.btn:hover{filter:brightness(1.08)}
+.btn.secondary{background:var(--surface2); color:var(--ink)}
+.btn.small{padding:8px 14px; font-size:.88rem; border-radius:10px}
+.btn:disabled{opacity:.45; cursor:default}
+.startrow{margin-top:22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+.startrow .note{font-size:.85rem; color:var(--muted)}
+
+/* ── Übungskarte ──────────────────── */
+.session-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px}
+.progressbar{flex:1; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden}
+.progressbar>div{height:100%; background:var(--sun); border-radius:3px; transition:width .25s}
+.session-head .count{font-size:.85rem; color:var(--muted); font-variant-numeric:tabular-nums}
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:28px 24px; text-align:center; display:flex; flex-direction:column; gap:18px; align-items:center;
+}
+.scenario-tag{font-size:.75rem; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--sun)}
+.prompt-de{font-size:1.3rem; font-weight:600; text-wrap:balance; max-width:32ch}
+.prompt-es{
+  font-family:"Lora",Georgia,serif; font-size:1.55rem; font-weight:600; color:var(--sea-deep);
+  text-wrap:balance; max-width:30ch; line-height:1.35;
+}
+.prompt-es .w-miss{color:var(--err); text-decoration:underline dotted; text-underline-offset:4px}
+.prompt-es .w-hit{color:inherit}
+.hidden{display:none !important}
+.micbtn{
+  width:84px; height:84px; border-radius:50%; background:var(--sea); color:var(--on-sea);
+  display:inline-flex; align-items:center; justify-content:center; transition:transform .12s, filter .12s;
+  box-shadow:0 4px 14px rgba(0,0,0,.14);
+}
+.micbtn:hover{filter:brightness(1.08)}
+.micbtn.listening{background:var(--err); animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+@media (prefers-reduced-motion: reduce){
+  .micbtn.listening{animation:none}
+  *{transition-duration:0s !important}
+}
+.micbtn svg{width:36px; height:36px}
+.cardactions{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+.heard{
+  width:100%; background:var(--surface2); border-radius:10px; padding:10px 14px; font-size:.95rem;
+}
+.heard .lbl{font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:block}
+.heard .txt{font-family:"Lora",Georgia,serif; font-style:italic}
+.scorepill{display:inline-block; padding:4px 12px; border-radius:999px; font-weight:600; font-size:.9rem}
+.scorepill.good{background:var(--ok-bg); color:var(--ok)}
+.scorepill.bad{background:var(--err-bg); color:var(--err)}
+.grades{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; width:100%}
+.grade{border-radius:12px; padding:12px 8px; font-weight:600; border:1px solid var(--line); background:var(--surface)}
+.grade small{display:block; font-weight:400; font-size:.75rem; color:var(--muted)}
+.grade.again{color:var(--err)} .grade.good{color:var(--sea)} .grade.easy{color:var(--ok)}
+.grade:hover{background:var(--surface2)}
+.done{
+  text-align:center; padding:40px 20px; background:var(--surface); border:1px solid var(--line); border-radius:16px;
+}
+.done h2{font-family:"Bricolage Grotesque",sans-serif; font-size:1.5rem; margin:0 0 6px}
+.done p{color:var(--muted); margin:0 0 20px}
+.warnbox{
+  background:var(--err-bg); color:var(--err); border-radius:10px; padding:10px 14px; font-size:.88rem; margin-bottom:14px;
+}
+
+/* ── Bibliothek ───────────────────── */
+details.deck{border:1px solid var(--line); border-radius:12px; background:var(--surface); margin-bottom:10px; overflow:hidden}
+details.deck summary{
+  list-style:none; display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:13px 16px; font-weight:600; cursor:pointer;
+}
+details.deck summary::-webkit-details-marker{display:none}
+details.deck summary .n{font-size:.8rem; color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums}
+.phrase{display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--line)}
+.phrase .texts{flex:1; min-width:0}
+.phrase .es{font-family:"Lora",Georgia,serif; font-weight:500}
+.phrase .de{font-size:.84rem; color:var(--muted)}
+.iconbtn{
+  width:38px; height:38px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--surface2); color:var(--sea); flex-shrink:0;
+}
+.iconbtn:hover{filter:brightness(1.06)}
+.iconbtn svg{width:19px; height:19px}
+.iconbtn.danger{color:var(--err)}
+form.addform{display:grid; gap:10px; margin-top:14px}
+form.addform input, form.addform select, textarea{
+  width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+  background:var(--surface); color:var(--ink); font:inherit;
+}
+.iorow{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px}
+textarea#ioText{min-height:110px; margin-top:10px; font-size:.82rem; font-family:ui-monospace,monospace}
+.muted-note{font-size:.85rem; color:var(--muted); margin-top:10px}
+footer.foot{margin-top:36px; font-size:.8rem; color:var(--muted); text-align:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Hablamos<span class="punct">.</span></div>
+    <div class="stats"><span>Fällig: <b id="statDue">0</b></span><span>Heute geübt: <b id="statToday">0</b></span></div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="train">Training</button>
+    <button role="tab" aria-selected="false" data-tab="library">Bibliothek</button>
+  </nav>
+
+  <!-- ── Training ── -->
+  <section id="tab-train">
+    <div id="setup" class="panel">
+      <h2>Sprechen üben</h2>
+      <p class="sub">Kurze Sitzungen, echte Sätze für Mallorca. Die App hört zu und vergleicht Wort für Wort.</p>
+      <div id="noMicWarn" class="warnbox hidden">
+        Spracherkennung ist in diesem Browser nicht verfügbar – am besten Chrome, Edge oder Safari nutzen.
+        Üben geht trotzdem: Lösung aufdecken und selbst bewerten.
+      </div>
+      <div class="fieldlabel">Modus</div>
+      <div class="modes">
+        <button class="mode" aria-pressed="true" data-mode="produce"><b>Deutsch → Spanisch</b><span>Du siehst den deutschen Satz und sprichst ihn auf Spanisch.</span></button>
+        <button class="mode" aria-pressed="false" data-mode="shadow"><b>Nachsprechen</b><span>Du hörst den spanischen Satz und sprichst ihn nach.</span></button>
+      </div>
+      <div class="fieldlabel">Szenarien</div>
+      <div class="chiprow" id="deckChips"></div>
+      <div class="startrow">
+        <button class="btn" id="startBtn">Sitzung starten</button>
+        <span class="note" id="queueNote"></span>
+      </div>
+    </div>
+
+    <div id="session" class="hidden">
+      <div class="session-head">
+        <div class="progressbar"><div id="progFill" style="width:0%"></div></div>
+        <span class="count" id="progCount"></span>
+        <button class="btn small secondary" id="quitBtn">Beenden</button>
+      </div>
+      <div class="card" id="card">
+        <div class="scenario-tag" id="cardDeck"></div>
+        <div class="prompt-de" id="cardDe"></div>
+        <div class="prompt-es hidden" id="cardEs"></div>
+        <button class="micbtn" id="micBtn" aria-label="Aufnahme starten">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
+        </button>
+        <div class="heard hidden" id="heardBox"><span class="lbl">Verstanden</span><span class="txt" id="heardTxt"></span></div>
+        <div id="scoreBox" class="hidden"><span class="scorepill" id="scorePill"></span></div>
+        <div class="cardactions">
+          <button class="btn small secondary" id="playBtn">Anhören</button>
+          <button class="btn small secondary" id="playSlowBtn">Langsam</button>
+          <button class="btn small secondary" id="revealBtn">Lösung zeigen</button>
+        </div>
+        <div class="grades hidden" id="grades">
+          <button class="grade again" data-grade="0">Nochmal<small>gleich wieder</small></button>
+          <button class="grade good" data-grade="1">Gut<small>in ein paar Tagen</small></button>
+          <button class="grade easy" data-grade="2">Leicht<small>viel später</small></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="doneBox" class="done hidden">
+      <h2>¡Muy bien!</h2>
+      <p id="doneText"></p>
+      <button class="btn" id="againBtn">Neue Sitzung</button>
+    </div>
+  </section>
+
+  <!-- ── Bibliothek ── -->
+  <section id="tab-library" class="hidden">
+    <div id="deckList"></div>
+    <div class="panel" style="margin-top:16px">
+      <h2>Eigener Satz</h2>
+      <p class="sub">Was wolltest du auf Mallorca sagen und konntest es nicht? Hier eintragen – es landet im Training.</p>
+      <form class="addform" id="addForm">
+        <input required id="addDe" placeholder="Deutsch – z. B. Können Sie mir helfen?">
+        <input required id="addEs" placeholder="Spanisch – z. B. ¿Puede ayudarme?">
+        <select id="addDeck"></select>
+        <button class="btn" type="submit">Hinzufügen</button>
+      </form>
+      <div class="iorow">
+        <button class="btn small secondary" id="exportBtn">Exportieren</button>
+        <button class="btn small secondary" id="importBtn">Importieren</button>
+      </div>
+      <textarea id="ioText" class="hidden" spellcheck="false" aria-label="Export/Import als JSON"></textarea>
+      <p class="muted-note" id="ioNote"></p>
+    </div>
+  </section>
+
+  <footer class="foot">Lernstand wird lokal in diesem Browser gespeichert.</footer>
+</div>
+
+<script>
+"use strict";
+/* ───────────────────────── Daten ───────────────────────── */
+const DECKS = [
+  {id:"smalltalk", name:"Smalltalk & Begrüßung", phrases:[
+    ["Guten Morgen! Wie geht's?","¡Buenos días! ¿Qué tal?"],
+    ["Ich heiße Tuno. Und Sie?","Me llamo Tuno. ¿Y usted?"],
+    ["Ich komme aus Österreich.","Soy de Austria."],
+    ["Wir sind oft hier auf Mallorca.","Venimos mucho a Mallorca."],
+    ["Ich lerne Spanisch.","Estoy aprendiendo español."],
+    ["Können Sie bitte langsamer sprechen?","¿Puede hablar más despacio, por favor?"],
+    ["Wie sagt man das auf Spanisch?","¿Cómo se dice esto en español?"],
+    ["Heute ist schönes Wetter, oder?","Hace buen tiempo hoy, ¿verdad?"],
+    ["Es war schön, Sie zu sehen.","Ha sido un placer verle."],
+    ["Bis morgen!","¡Hasta mañana!"]
+  ]},
+  {id:"cafe", name:"Café & Bäckerei", phrases:[
+    ["Einen Milchkaffee, bitte.","Un café con leche, por favor."],
+    ["Zwei Croissants zum Mitnehmen, bitte.","Dos cruasanes para llevar, por favor."],
+    ["Was können Sie mir empfehlen?","¿Qué me recomienda?"],
+    ["Ein Stück von dieser Torte, bitte.","Un trozo de esta tarta, por favor."],
+    ["Haben Sie noch Ensaimadas?","¿Le quedan ensaimadas?"],
+    ["Wie viel kostet das?","¿Cuánto cuesta?"],
+    ["Ich zahle mit Karte.","Pago con tarjeta."],
+    ["Der Rest ist für Sie.","Quédese con el cambio."]
+  ]},
+  {id:"restaurant", name:"Restaurant", phrases:[
+    ["Einen Tisch für zwei, bitte.","Una mesa para dos, por favor."],
+    ["Haben Sie einen Tisch auf der Terrasse?","¿Tienen una mesa en la terraza?"],
+    ["Die Karte, bitte.","La carta, por favor."],
+    ["Was ist das Tagesgericht?","¿Cuál es el plato del día?"],
+    ["Für mich den Fisch, bitte.","Para mí, el pescado, por favor."],
+    ["Ein Glas Rotwein, bitte.","Una copa de vino tinto, por favor."],
+    ["Noch etwas Wasser, bitte.","Más agua, por favor."],
+    ["Es war sehr lecker.","Estaba muy rico."],
+    ["Die Rechnung, bitte.","La cuenta, por favor."],
+    ["Können wir getrennt zahlen?","¿Podemos pagar por separado?"]
+  ]},
+  {id:"markt", name:"Markt & Einkaufen", phrases:[
+    ["Ein Kilo Tomaten, bitte.","Un kilo de tomates, por favor."],
+    ["Sind die Erdbeeren von hier?","¿Las fresas son de aquí?"],
+    ["Darf ich probieren?","¿Puedo probar?"],
+    ["Ein bisschen mehr, bitte.","Un poco más, por favor."],
+    ["Haben Sie das in Größe 42?","¿Lo tienen en la talla 42?"],
+    ["Ich schaue nur, danke.","Solo estoy mirando, gracias."],
+    ["Wo finde ich das Olivenöl?","¿Dónde encuentro el aceite de oliva?"],
+    ["Eine Tüte, bitte.","Una bolsa, por favor."]
+  ]},
+  {id:"unterwegs", name:"Unterwegs & Taxi", phrases:[
+    ["Zum Flughafen, bitte.","Al aeropuerto, por favor."],
+    ["Wie komme ich ins Zentrum?","¿Cómo llego al centro?"],
+    ["Ist es weit zu Fuß?","¿Está lejos a pie?"],
+    ["Halten Sie hier, bitte.","Pare aquí, por favor."],
+    ["Wo ist die nächste Tankstelle?","¿Dónde está la gasolinera más cercana?"],
+    ["Ich habe mich verfahren.","Me he perdido."],
+    ["Kann ich hier parken?","¿Puedo aparcar aquí?"],
+    ["Wann fährt der nächste Bus nach Palma?","¿Cuándo sale el próximo autobús a Palma?"]
+  ]},
+  {id:"haus", name:"Nachbarn & Handwerker", phrases:[
+    ["Wir sind die Nachbarn von nebenan.","Somos los vecinos de al lado."],
+    ["Der Wasserhahn tropft.","El grifo gotea."],
+    ["Können Sie diese Woche vorbeikommen?","¿Puede pasar esta semana?"],
+    ["Wie viel wird die Reparatur kosten?","¿Cuánto costará la reparación?"],
+    ["Die Klimaanlage funktioniert nicht.","El aire acondicionado no funciona."],
+    ["Wir haben keinen Strom.","No tenemos luz."],
+    ["Wann können Sie anfangen?","¿Cuándo puede empezar?"],
+    ["Vielen Dank für Ihre Hilfe.","Muchas gracias por su ayuda."]
+  ]},
+  {id:"bank", name:"Bank & Geld", phrases:[
+    ["Ich möchte Geld abheben.","Quiero sacar dinero."],
+    ["Der Automat nimmt meine Karte nicht.","El cajero no acepta mi tarjeta."],
+    ["Ich möchte ein Konto eröffnen.","Quiero abrir una cuenta."],
+    ["Gibt es Gebühren?","¿Hay comisiones?"],
+    ["Ich habe eine Überweisung gemacht.","He hecho una transferencia."],
+    ["Kann ich einen Termin vereinbaren?","¿Puedo pedir una cita?"]
+  ]},
+  {id:"gesundheit", name:"Gesundheit & Notfall", phrases:[
+    ["Ich brauche einen Arzt.","Necesito un médico."],
+    ["Wo ist die nächste Apotheke?","¿Dónde está la farmacia más cercana?"],
+    ["Ich habe Kopfschmerzen.","Me duele la cabeza."],
+    ["Ich bin allergisch gegen Penicillin.","Soy alérgico a la penicilina."],
+    ["Rufen Sie bitte einen Krankenwagen.","Llame a una ambulancia, por favor."],
+    ["Haben Sie etwas gegen Sonnenbrand?","¿Tiene algo para las quemaduras de sol?"]
+  ]}
+];
+
+/* ─────────────────────── Speicher ──────────────────────── */
+const LS = {progress:"hablamos_progress", custom:"hablamos_custom", log:"hablamos_log", sel:"hablamos_sel"};
+const load = (k,f)=>{try{return JSON.parse(localStorage.getItem(k)) ?? f}catch{return f}};
+const save = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
+let progress = load(LS.progress, {});     // id -> {reps, iv, ease, due}
+let custom   = load(LS.custom, []);       // [{id, deck, de, es}]
+let log      = load(LS.log, {});          // "YYYY-MM-DD" -> Anzahl bewerteter Karten
+
+const idFor = es => "p" + [...es].reduce((h,c)=>((h<<5)-h+c.charCodeAt(0))|0, 0);
+function allCards(){
+  const out = [];
+  for(const d of DECKS) for(const [de,es] of d.phrases) out.push({id:idFor(es), deck:d.id, deckName:d.name, de, es});
+  for(const c of custom){
+    const d = DECKS.find(x=>x.id===c.deck);
+    out.push({id:c.id, deck:c.deck, deckName:(d?d.name:"Eigene Sätze"), de:c.de, es:c.es, custom:true});
+  }
+  return out;
+}
+const todayKey = ()=>new Date().toISOString().slice(0,10);
+const now = ()=>Date.now();
+const dueCount = sel => allCards().filter(c=>sel.includes(c.deck) && (progress[c.id]?.due ?? 0) <= now()).length;
+
+/* ─────────────────────── Sprache ───────────────────────── */
+const synth = window.speechSynthesis;
+let esVoice = null;
+function pickVoice(){
+  if(!synth) return;
+  const vs = synth.getVoices().filter(v=>v.lang && v.lang.toLowerCase().startsWith("es"));
+  esVoice = vs.find(v=>/es[-_]ES/i.test(v.lang) && /google/i.test(v.name))
+        || vs.find(v=>/es[-_]ES/i.test(v.lang)) || vs[0] || null;
+}
+if(synth){ pickVoice(); synth.onvoiceschanged = pickVoice; }
+function speak(text, slow){
+  if(!synth) return;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "es-ES"; if(esVoice) u.voice = esVoice;
+  u.rate = slow ? 0.72 : 0.95;
+  synth.speak(u);
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ─────────────────────── Vergleich ─────────────────────── */
+const norm = s => s.toLowerCase()
+  .normalize("NFD").replace(/[̀-ͯ]/g,"")
+  .replace(/[¿¡.,;:!?"'()\-–—]/g," ").replace(/\s+/g," ").trim();
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++)
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[n];
+}
+function compare(target, heard){
+  const t = norm(target), h = norm(heard);
+  if(!h) return {score:0, hits:new Set()};
+  const strSim = 1 - levenshtein(t,h)/Math.max(t.length,h.length);
+  const tw = t.split(" "), hw = h.split(" ");
+  const pool = new Map();
+  hw.forEach(w=>pool.set(w,(pool.get(w)||0)+1));
+  const hits = new Set();
+  tw.forEach((w,i)=>{
+    if(pool.get(w)>0){ pool.set(w,pool.get(w)-1); hits.add(i); return; }
+    // fast richtig gesprochene Wörter zählen auch (kleine Erkennungsfehler)
+    for(const [pw,c] of pool){
+      if(c>0 && pw.length>3 && levenshtein(w,pw) <= (w.length>5?2:1)){ pool.set(pw,c-1); hits.add(i); return; }
+    }
+  });
+  const wordSim = hits.size / tw.length;
+  return {score:Math.round(Math.max(strSim, wordSim)*100), hits};
+}
+
+/* ─────────────────────── SRS ───────────────────────────── */
+const DAY = 86400000;
+function applyGrade(id, g){
+  const p = progress[id] || {reps:0, iv:0, ease:2.5, due:0};
+  if(g===0){ p.reps=0; p.iv=0; p.ease=Math.max(1.3, p.ease-0.2); p.due=now()+5*60000; }
+  else{
+    p.reps++;
+    if(g===2) p.ease=Math.min(3, p.ease+0.15);
+    p.iv = p.reps===1 ? (g===2?3:1) : p.reps===2 ? (g===2?7:3) : Math.round(p.iv*p.ease*(g===2?1.3:1));
+    p.due = now() + p.iv*DAY;
+  }
+  progress[id]=p; save(LS.progress, progress);
+  log[todayKey()] = (log[todayKey()]||0)+1; save(LS.log, log);
+}
+
+/* ─────────────────────── UI-Helfer ─────────────────────── */
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function refreshStats(){
+  $("statDue").textContent = dueCount(DECKS.map(d=>d.id));
+  $("statToday").textContent = log[todayKey()]||0;
+}
+
+/* Tabs */
+document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
+  $("tab-train").classList.toggle("hidden", b.dataset.tab!=="train");
+  $("tab-library").classList.toggle("hidden", b.dataset.tab!=="library");
+  if(b.dataset.tab==="library") renderLibrary();
+}));
+
+/* Setup */
+let selDecks = load(LS.sel, DECKS.map(d=>d.id));
+let mode = "produce";
+function renderChips(){
+  $("deckChips").innerHTML = "";
+  for(const d of DECKS){
+    const b = document.createElement("button");
+    b.className="chip"; b.textContent=d.name;
+    b.setAttribute("aria-pressed", selDecks.includes(d.id));
+    b.addEventListener("click",()=>{
+      selDecks = selDecks.includes(d.id) ? selDecks.filter(x=>x!==d.id) : [...selDecks, d.id];
+      if(!selDecks.length) selDecks=[d.id];
+      save(LS.sel, selDecks); renderChips(); updateQueueNote();
+    });
+    $("deckChips").appendChild(b);
+  }
+}
+document.querySelectorAll(".mode").forEach(b=>b.addEventListener("click",()=>{
+  mode = b.dataset.mode;
+  document.querySelectorAll(".mode").forEach(x=>x.setAttribute("aria-pressed", x===b));
+}));
+function updateQueueNote(){
+  $("queueNote").textContent = `${dueCount(selDecks)} Sätze fällig in den gewählten Szenarien`;
+}
+if(!SR) $("noMicWarn").classList.remove("hidden");
+
+/* ─────────────────────── Sitzung ───────────────────────── */
+const SESSION_SIZE = 12;
+let queue=[], cur=null, total=0, doneCards=0, revealed=false, recog=null;
+
+function buildQueue(){
+  const cards = allCards().filter(c=>selDecks.includes(c.deck));
+  const due = cards.filter(c=>progress[c.id] && progress[c.id].due<=now());
+  const fresh = cards.filter(c=>!progress[c.id]);
+  due.sort((a,b)=>progress[a.id].due-progress[b.id].due);
+  const q = [...due, ...fresh].slice(0, SESSION_SIZE);
+  // durchmischen, damit nicht ein Szenario am Stück kommt
+  for(let i=q.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q[i],q[j]]=[q[j],q[i]];}
+  return q;
+}
+$("startBtn").addEventListener("click", ()=>{
+  queue = buildQueue();
+  if(!queue.length){ $("queueNote").textContent="Alles gelernt – gerade ist nichts fällig. Komm später wieder."; return; }
+  total = queue.length; doneCards = 0;
+  $("setup").classList.add("hidden"); $("doneBox").classList.add("hidden");
+  $("session").classList.remove("hidden");
+  nextCard();
+});
+$("quitBtn").addEventListener("click", endSession);
+$("againBtn").addEventListener("click", ()=>{ $("doneBox").classList.add("hidden"); $("setup").classList.remove("hidden"); updateQueueNote(); });
+
+function nextCard(){
+  stopListening();
+  if(!queue.length) return endSession(true);
+  cur = queue.shift(); revealed=false;
+  const remaining = doneCards + queue.length + 1;
+  $("progFill").style.width = (doneCards/remaining*100)+"%";
+  $("progCount").textContent = `${doneCards+1} / ${remaining}`;
+  $("cardDeck").textContent = cur.deckName;
+  $("cardDe").textContent = cur.de;
+  $("cardEs").classList.add("hidden"); $("cardEs").innerHTML="";
+  $("heardBox").classList.add("hidden"); $("scoreBox").classList.add("hidden");
+  $("grades").classList.add("hidden");
+  $("micBtn").classList.toggle("hidden", !SR);
+  if(mode==="shadow"){
+    $("cardDe").textContent = "Hör zu und sprich nach"; // Prompt ist das Audio
+    speak(cur.es, false);
+  }
+}
+function reveal(withDiff){
+  revealed = true;
+  const hits = withDiff ? withDiff.hits : null;
+  const words = cur.es.split(" ");
+  // Wortindex bezieht sich auf normalisierte Wörter; Satzzeichen-only-Tokens überspringen
+  let ni=0;
+  $("cardEs").innerHTML = words.map(w=>{
+    const isWord = norm(w).length>0;
+    const cls = !hits ? "w-hit" : (isWord ? (hits.has(ni)?"w-hit":"w-miss") : "w-hit");
+    if(isWord) ni++;
+    return `<span class="${cls}">${esc(w)}</span>`;
+  }).join(" ");
+  $("cardEs").classList.remove("hidden");
+  $("grades").classList.remove("hidden");
+  if(mode==="shadow") $("cardDe").textContent = cur.de;
+}
+$("revealBtn").addEventListener("click", ()=>{ reveal(null); speak(cur.es,false); });
+$("playBtn").addEventListener("click", ()=>{ if(mode==="produce" && !revealed) reveal(null); speak(cur.es,false); });
+$("playSlowBtn").addEventListener("click", ()=>{ if(mode==="produce" && !revealed) reveal(null); speak(cur.es,true); });
+document.querySelectorAll(".grade").forEach(b=>b.addEventListener("click", ()=>{
+  const g = +b.dataset.grade;
+  applyGrade(cur.id, g);
+  if(g===0) queue.push(cur); else doneCards++;
+  refreshStats();
+  nextCard();
+}));
+
+/* Aufnahme */
+$("micBtn").addEventListener("click", ()=>{
+  if(recog){ stopListening(); return; }
+  if(!SR) return;
+  if(synth) synth.cancel();
+  recog = new SR();
+  recog.lang="es-ES"; recog.interimResults=false; recog.maxAlternatives=3;
+  $("micBtn").classList.add("listening");
+  $("micBtn").setAttribute("aria-label","Aufnahme stoppen");
+  recog.onresult = e=>{
+    let best={score:-1, text:"", hits:new Set()};
+    for(const alt of e.results[0]){
+      const r = compare(cur.es, alt.transcript);
+      if(r.score>best.score) best={...r, text:alt.transcript};
+    }
+    $("heardTxt").textContent = best.text || "–";
+    $("heardBox").classList.remove("hidden");
+    const good = best.score>=75;
+    const pill = $("scorePill");
+    pill.textContent = good ? `${best.score} % – ¡muy bien!` : `${best.score} % – fast!`;
+    pill.className = "scorepill " + (good?"good":"bad");
+    $("scoreBox").classList.remove("hidden");
+    reveal(best);
+  };
+  recog.onerror = e=>{
+    stopListening();
+    if(e.error==="not-allowed" || e.error==="service-not-allowed"){
+      $("heardTxt").textContent="Kein Mikrofon-Zugriff. Bitte Mikrofon erlauben oder die Datei direkt im Browser öffnen.";
+      $("heardBox").classList.remove("hidden");
+    }
+  };
+  recog.onend = ()=>stopListening();
+  try{ recog.start(); }catch{ stopListening(); }
+});
+function stopListening(){
+  if(recog){ try{recog.abort();}catch{} recog=null; }
+  $("micBtn").classList.remove("listening");
+  $("micBtn").setAttribute("aria-label","Aufnahme starten");
+}
+function endSession(finished){
+  stopListening(); if(synth) synth.cancel();
+  $("session").classList.add("hidden");
+  if(finished){
+    $("doneText").textContent = `${doneCards} Sätze geübt. Genau so lernt man sprechen – bis später!`;
+    $("doneBox").classList.remove("hidden");
+  } else {
+    $("setup").classList.remove("hidden"); updateQueueNote();
+  }
+  refreshStats();
+}
+
+/* ─────────────────────── Bibliothek ────────────────────── */
+function renderLibrary(){
+  const list = $("deckList"); list.innerHTML="";
+  const cards = allCards();
+  for(const d of DECKS){
+    const ph = cards.filter(c=>c.deck===d.id);
+    const det = document.createElement("details"); det.className="deck";
+    det.innerHTML = `<summary>${esc(d.name)}<span class="n">${ph.length} Sätze</span></summary>`;
+    for(const c of ph){
+      const row = document.createElement("div"); row.className="phrase";
+      row.innerHTML = `<div class="texts"><div class="es">${esc(c.es)}</div><div class="de">${esc(c.de)}</div></div>`;
+      const play = document.createElement("button");
+      play.className="iconbtn"; play.setAttribute("aria-label","Anhören");
+      play.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+      play.addEventListener("click",()=>speak(c.es,false));
+      row.appendChild(play);
+      if(c.custom){
+        const del = document.createElement("button");
+        del.className="iconbtn danger"; del.setAttribute("aria-label","Löschen");
+        del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+        del.addEventListener("click",()=>{
+          custom = custom.filter(x=>x.id!==c.id); save(LS.custom, custom);
+          renderLibrary(); refreshStats();
+        });
+        row.appendChild(del);
+      }
+      det.appendChild(row);
+    }
+    list.appendChild(det);
+  }
+}
+for(const d of DECKS){
+  const o = document.createElement("option"); o.value=d.id; o.textContent=d.name;
+  $("addDeck").appendChild(o);
+}
+$("addForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  custom.push({id:"c"+now()+Math.floor(Math.random()*1e4), deck:$("addDeck").value, de:$("addDe").value.trim(), es:$("addEs").value.trim()});
+  save(LS.custom, custom);
+  $("addDe").value=""; $("addEs").value="";
+  $("ioNote").textContent="Gespeichert – der Satz ist jetzt im Training dabei.";
+  renderLibrary(); refreshStats();
+});
+$("exportBtn").addEventListener("click", ()=>{
+  const data = JSON.stringify({custom, progress, log}, null, 1);
+  $("ioText").classList.remove("hidden"); $("ioText").value = data;
+  navigator.clipboard?.writeText(data).then(
+    ()=>$("ioNote").textContent="In die Zwischenablage kopiert – z. B. als Backup in eine Notiz einfügen.",
+    ()=>$("ioNote").textContent="Text unten markieren und kopieren."
+  );
+});
+$("importBtn").addEventListener("click", ()=>{
+  const ta = $("ioText");
+  if(ta.classList.contains("hidden") || !ta.value.trim()){
+    ta.classList.remove("hidden"); ta.value=""; ta.focus();
+    $("ioNote").textContent="Backup-JSON hier einfügen und noch einmal auf „Importieren“ tippen.";
+    return;
+  }
+  try{
+    const d = JSON.parse(ta.value);
+    if(d.custom) { custom = d.custom; save(LS.custom, custom); }
+    if(d.progress){ progress = d.progress; save(LS.progress, progress); }
+    if(d.log)     { log = d.log; save(LS.log, log); }
+    $("ioNote").textContent="Import erfolgreich.";
+    renderLibrary(); refreshStats(); renderChips(); updateQueueNote();
+  }catch{ $("ioNote").textContent="Das war kein gültiges Backup-JSON."; }
+});
+
+/* Start */
+renderChips(); updateQueueNote(); refreshStats();
+</script>
+</body>
+</html>
