@@ -649,7 +649,7 @@ document.querySelectorAll(".grade").forEach(b=>b.addEventListener("click", ()=>{
 }));
 
 /* Aufnahme */
-let recogTimer=null, gotResult=false, recogFailed=false;
+let recogTimer=null, gotResult=false, recogFailed=false, lastHeard="";
 const MIC_ERRORS = {
   "no-speech":"Nichts gehört – bitte gleich nach dem Antippen laut sprechen.",
   "audio-capture":"Kein Mikrofon gefunden. Ist eines angeschlossen und ausgewählt?",
@@ -664,33 +664,30 @@ $("micBtn").addEventListener("click", ()=>{
   if(synth) synth.cancel();
   recog = new SR();
   recog.lang="es-ES"; recog.interimResults=true; recog.maxAlternatives=3;
-  gotResult=false; recogFailed=false;
+  gotResult=false; recogFailed=false; lastHeard="";
   $("micBtn").classList.add("listening");
   $("micBtn").setAttribute("aria-label","Aufnahme stoppen");
-  $("micStatus").textContent="Ich höre zu – sprich jetzt …";
+  $("micStatus").textContent="Ich höre zu – sprich jetzt … (Antippen stoppt)";
   recog.onresult = e=>{
-    const res = e.results[e.results.length-1];
-    if(!res.isFinal){
-      // Live anzeigen, was bereits verstanden wird
-      $("heardTxt").textContent = res[0].transcript+" …";
+    // iOS/Safari liefert oft nur Zwischenergebnisse ohne isFinal –
+    // deshalb immer den kompletten bisherigen Text merken
+    let text=""; for(const res of e.results) text += res[0].transcript+" ";
+    lastHeard = text.trim();
+    const last = e.results[e.results.length-1];
+    if(!last.isFinal){
+      $("heardTxt").textContent = lastHeard+" …";
       $("heardBox").classList.remove("hidden");
       return;
     }
-    gotResult=true;
-    let best={score:-1, text:"", hits:new Set()};
-    for(const alt of res){
-      const r = compare(cur.es, alt.transcript);
-      if(r.score>best.score) best={...r, text:alt.transcript};
+    // Finale Erkennung: beste Alternative des letzten Segments wählen
+    let prefix=""; for(let i=0;i<e.results.length-1;i++) prefix += e.results[i][0].transcript+" ";
+    let best={score:-1, text:lastHeard};
+    for(const alt of last){
+      const cand=(prefix+alt.transcript).trim();
+      const r=compare(cur.es, cand);
+      if(r.score>best.score) best={score:r.score, text:cand};
     }
-    $("heardTxt").textContent = best.text || "–";
-    $("heardBox").classList.remove("hidden");
-    const good = best.score>=75;
-    const pill = $("scorePill");
-    pill.textContent = good ? `${best.score} % – ¡muy bien!` : `${best.score} % – fast!`;
-    pill.className = "scorepill " + (good?"good":"bad");
-    $("scoreBox").classList.remove("hidden");
-    $("micStatus").textContent="";
-    reveal(best);
+    finalizeResult(best.text);
   };
   recog.onerror = e=>{
     if(e.error==="aborted") return;
@@ -699,7 +696,8 @@ $("micBtn").addEventListener("click", ()=>{
   };
   recog.onend = ()=>{
     stopListening();
-    if(!gotResult && !recogFailed)
+    if(!gotResult && lastHeard) finalizeResult(lastHeard);   // Zwischenergebnis werten (iOS)
+    else if(!gotResult && !recogFailed)
       $("micStatus").textContent="Nichts erkannt – noch einmal antippen und deutlich sprechen.";
   };
   // Sicherheitsnetz: nach 10 s automatisch stoppen, falls nichts passiert
@@ -707,6 +705,20 @@ $("micBtn").addEventListener("click", ()=>{
   try{ recog.start(); }
   catch(err){ recogFailed=true; $("micStatus").textContent="Aufnahme konnte nicht starten: "+err.message; stopListening(); }
 });
+function finalizeResult(text){
+  if(gotResult || !text) return;
+  gotResult=true;
+  const best = compare(cur.es, text);
+  $("heardTxt").textContent = text;
+  $("heardBox").classList.remove("hidden");
+  const good = best.score>=75;
+  const pill = $("scorePill");
+  pill.textContent = good ? `${best.score} % – ¡muy bien!` : `${best.score} % – fast!`;
+  pill.className = "scorepill " + (good?"good":"bad");
+  $("scoreBox").classList.remove("hidden");
+  $("micStatus").textContent="";
+  reveal(best);
+}
 function stopListening(){
   if(recogTimer){ clearTimeout(recogTimer); recogTimer=null; }
   if(recog){ const r=recog; recog=null; try{r.abort();}catch{} }
