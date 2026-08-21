@@ -5,9 +5,17 @@ Sprechen-Lernen für Mallorca.
 
 ## Benutzen
 
-`index.html` in Chrome, Edge oder Safari öffnen – am besten auf dem Handy oder
-Laptop mit Mikrofon. Beim ersten Antippen des Mikrofon-Buttons fragt der
-Browser nach der Mikrofon-Erlaubnis.
+**Feste Adresse (empfohlen, volle Mikrofon-Unterstützung):**
+<https://hablamos-constantin-veyder-malbergs-projects.vercel.app>
+– in Chrome, Edge oder Safari öffnen, am Handy „Zum Home-Bildschirm hinzufügen“.
+
+Alternativ `index.html` lokal im Browser öffnen. Beim ersten Antippen des
+Mikrofon-Buttons fragt der Browser nach der Mikrofon-Erlaubnis.
+
+Wichtig: Die Spracherkennung des Browsers funktioniert nur, wenn die App als
+eigene Seite läuft (Vercel-Adresse oder lokale Datei). In eingebetteten
+Fenstern (z. B. Artefakt-Vorschau) blockiert der Browser sie oft – die App
+zeigt dann eine entsprechende Meldung unter dem Mikrofon-Button.
 
 ## Funktionen
 
@@ -17,7 +25,10 @@ Browser nach der Mikrofon-Erlaubnis.
 - **Spaced Repetition**: richtig gesprochene Sätze kommen in wachsenden
   Abständen wieder, schwierige sofort.
 - **Mallorca-Szenarien**: Smalltalk, Café, Restaurant, Markt, Taxi,
-  Handwerker/Nachbarn, Bank, Gesundheit – 64 Sätze, erweiterbar.
+  Handwerker/Nachbarn, Haushalt/Hausangestellte, Bank, Behörden, Gesundheit –
+  102 Sätze, erweiterbar.
+- **Fortschritt**: Wochenziel (einstellbar), 14-Tage-Übersicht, Stand pro
+  Szenario, Zahl der sicher gekonnten Sätze.
 - **Eigene Sätze**: unter „Bibliothek“ eintragen, was man vor Ort sagen wollte.
 - **Backup**: Export/Import des Lernstands als JSON (Speicherung sonst lokal
   im Browser, `localStorage`).

@@ -164,7 +164,34 @@ form.addform input, form.addform select, textarea{
 .iorow{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px}
 textarea#ioText{min-height:110px; margin-top:10px; font-size:.82rem; font-family:ui-monospace,monospace}
 .muted-note{font-size:.85rem; color:var(--muted); margin-top:10px}
+
+/* ── Fortschritt ──────────────────── */
+.tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+@media (max-width:460px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px}
+.tile.wide{grid-column:1/-1}
+.tile .k{font-family:"Bricolage Grotesque",sans-serif; font-size:1.7rem; font-weight:700; display:block; font-variant-numeric:tabular-nums; line-height:1.1}
+.tile .l{font-size:.8rem; color:var(--muted)}
+.goalbar{height:8px; background:var(--surface2); border-radius:4px; margin:12px 0 8px; overflow:hidden}
+#goalFill{height:100%; background:var(--sun); border-radius:4px; transition:width .25s}
+.goal{font-size:.85rem; color:var(--muted)}
+.goal input{width:64px; padding:3px 6px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--ink); font:inherit; font-size:.85rem; font-variant-numeric:tabular-nums}
+.chart{display:flex; gap:4px; height:150px; margin-top:8px}
+.chart .col{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0}
+.chart .v{font-size:.7rem; color:var(--muted); height:14px; font-variant-numeric:tabular-nums}
+.chart .barwrap{flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center}
+.chart .bar{width:100%; max-width:22px; background:var(--sea); border-radius:4px 4px 0 0; min-height:2px}
+.chart .col.today .bar{background:var(--sun)}
+.chart .d{font-size:.68rem; color:var(--muted)}
+.deckstat{display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line)}
+.deckstat:first-child{border-top:none}
+.deckstat .name{flex:1; font-size:.9rem; min-width:0}
+.deckstat .mini{width:110px; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; flex-shrink:0}
+.deckstat .mini>div{height:100%; background:var(--sea); border-radius:3px}
+.deckstat .nums{font-size:.78rem; color:var(--muted); font-variant-numeric:tabular-nums; width:56px; text-align:right; flex-shrink:0}
+.micstatus{font-size:.85rem; color:var(--muted); min-height:1.3em; max-width:36ch}
 footer.foot{margin-top:36px; font-size:.8rem; color:var(--muted); text-align:center}
+footer.foot a{color:var(--sea)}
 </style>
 </head>
 <body>
@@ -177,6 +204,7 @@ footer.foot{margin-top:36px; font-size:.8rem; color:var(--muted); text-align:cen
   <nav class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="train">Training</button>
     <button role="tab" aria-selected="false" data-tab="library">Bibliothek</button>
+    <button role="tab" aria-selected="false" data-tab="stats">Fortschritt</button>
   </nav>
 
   <!-- ── Training ── -->
@@ -214,6 +242,7 @@ footer.foot{margin-top:36px; font-size:.8rem; color:var(--muted); text-align:cen
         <button class="micbtn" id="micBtn" aria-label="Aufnahme starten">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
         </button>
+        <div class="micstatus" id="micStatus"></div>
         <div class="heard hidden" id="heardBox"><span class="lbl">Verstanden</span><span class="txt" id="heardTxt"></span></div>
         <div id="scoreBox" class="hidden"><span class="scorepill" id="scorePill"></span></div>
         <div class="cardactions">
@@ -257,7 +286,31 @@ footer.foot{margin-top:36px; font-size:.8rem; color:var(--muted); text-align:cen
     </div>
   </section>
 
-  <footer class="foot">Lernstand wird lokal in diesem Browser gespeichert.</footer>
+  <!-- ── Fortschritt ── -->
+  <section id="tab-stats" class="hidden">
+    <div class="tiles">
+      <div class="tile wide">
+        <span class="k" id="stWeek">0</span><span class="l">Sätze diese Woche geübt</span>
+        <div class="goalbar"><div id="goalFill" style="width:0%"></div></div>
+        <label class="goal">Wochenziel: <input id="goalInput" type="number" min="10" step="10" value="60"> Sätze</label>
+      </div>
+      <div class="tile"><span class="k" id="stStarted">0</span><span class="l">Sätze begonnen</span></div>
+      <div class="tile"><span class="k" id="stSolid">0</span><span class="l">sicher gekonnt</span></div>
+      <div class="tile"><span class="k" id="stDue2">0</span><span class="l">jetzt fällig</span></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Geübte Sätze – letzte 14 Tage</h2>
+      <div class="chart" id="chart14" role="img" aria-label="Balkendiagramm der geübten Sätze pro Tag"></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Szenarien</h2>
+      <p class="sub">Wie viele Sätze pro Szenario schon im Training sind.</p>
+      <div id="deckStats"></div>
+    </div>
+  </section>
+
+  <footer class="foot">Lernstand wird lokal in diesem Browser gespeichert. ·
+    <a href="https://hablamos-constantin-veyder-malbergs-projects.vercel.app">hablamos&hellip;vercel.app</a></footer>
 </div>
 
 <script>
@@ -326,7 +379,27 @@ const DECKS = [
     ["Die Klimaanlage funktioniert nicht.","El aire acondicionado no funciona."],
     ["Wir haben keinen Strom.","No tenemos luz."],
     ["Wann können Sie anfangen?","¿Cuándo puede empezar?"],
+    ["Können Sie mir einen Kostenvoranschlag machen?","¿Puede hacerme un presupuesto?"],
+    ["Die Rollläden klemmen.","Las persianas están atascadas."],
+    ["Die Heizung funktioniert nicht.","La calefacción no funciona."],
+    ["Im Bad ist ein Wasserschaden.","Hay una fuga de agua en el baño."],
+    ["Wann sind Sie fertig?","¿Cuándo terminará?"],
+    ["Schicken Sie mir bitte die Rechnung.","Envíeme la factura, por favor."],
     ["Vielen Dank für Ihre Hilfe.","Muchas gracias por su ayuda."]
+  ]},
+  {id:"haushalt", name:"Haushalt & Hausangestellte", phrases:[
+    ["Können Sie am Freitag kommen?","¿Puede venir el viernes?"],
+    ["Bitte putzen Sie auch die Fenster.","Limpie también las ventanas, por favor."],
+    ["Wo ist der Schlüssel?","¿Dónde está la llave?"],
+    ["Bitte wechseln Sie die Bettwäsche.","Cambie las sábanas, por favor."],
+    ["Das Putzmittel ist unter der Spüle.","El producto de limpieza está debajo del fregadero."],
+    ["Am Samstag bekommen wir Gäste.","El sábado tenemos invitados."],
+    ["Ich lasse das Geld auf dem Tisch.","Dejo el dinero en la mesa."],
+    ["Brauchen Sie etwas fürs Haus?","¿Necesita algo para la casa?"],
+    ["Bitte nehmen Sie den Müll mit.","Llévese la basura, por favor."],
+    ["Der Pool muss gereinigt werden.","Hay que limpiar la piscina."],
+    ["Der Gärtner kommt dienstags.","El jardinero viene los martes."],
+    ["Bitte gießen Sie die Pflanzen.","Riegue las plantas, por favor."]
   ]},
   {id:"bank", name:"Bank & Geld", phrases:[
     ["Ich möchte Geld abheben.","Quiero sacar dinero."],
@@ -334,7 +407,29 @@ const DECKS = [
     ["Ich möchte ein Konto eröffnen.","Quiero abrir una cuenta."],
     ["Gibt es Gebühren?","¿Hay comisiones?"],
     ["Ich habe eine Überweisung gemacht.","He hecho una transferencia."],
+    ["Ich möchte fünfhundert Euro überweisen.","Quiero transferir quinientos euros."],
+    ["Ich erwarte eine Überweisung aus Österreich.","Espero una transferencia desde Austria."],
+    ["Ich möchte Bargeld einzahlen.","Quiero ingresar dinero en efectivo."],
+    ["Können Sie mir einen Kontoauszug geben?","¿Me puede dar un extracto de la cuenta?"],
+    ["Ich möchte die Rechnungen per Lastschrift zahlen.","Quiero domiciliar los recibos."],
+    ["Ich habe meine Karte verloren.","He perdido la tarjeta."],
+    ["Bitte sperren Sie die Karte.","Bloquee la tarjeta, por favor."],
+    ["Meine Handynummer hat sich geändert.","Ha cambiado mi número de móvil."],
     ["Kann ich einen Termin vereinbaren?","¿Puedo pedir una cita?"]
+  ]},
+  {id:"behoerden", name:"Behörden & Papiere", phrases:[
+    ["Ich habe einen Termin um zehn Uhr.","Tengo una cita a las diez."],
+    ["Wo bekomme ich einen Termin?","¿Dónde pido la cita previa?"],
+    ["Ich möchte mich hier anmelden.","Quiero empadronarme."],
+    ["Hier ist mein Reisepass.","Aquí tiene mi pasaporte."],
+    ["Ich brauche eine NIE-Nummer.","Necesito un número de NIE."],
+    ["Welche Unterlagen brauche ich?","¿Qué documentos necesito?"],
+    ["Ich habe das Formular ausgefüllt.","He rellenado el formulario."],
+    ["Wo muss ich unterschreiben?","¿Dónde tengo que firmar?"],
+    ["Können Sie mir eine Kopie machen?","¿Me puede hacer una copia?"],
+    ["Wie lange dauert die Bearbeitung?","¿Cuánto tarda el trámite?"],
+    ["Das verstehe ich nicht. Können Sie es mir erklären?","No lo entiendo. ¿Me lo puede explicar?"],
+    ["Muss ich noch einmal kommen?","¿Tengo que volver otra vez?"]
   ]},
   {id:"gesundheit", name:"Gesundheit & Notfall", phrases:[
     ["Ich brauche einen Arzt.","Necesito un médico."],
@@ -347,7 +442,7 @@ const DECKS = [
 ];
 
 /* ─────────────────────── Speicher ──────────────────────── */
-const LS = {progress:"hablamos_progress", custom:"hablamos_custom", log:"hablamos_log", sel:"hablamos_sel"};
+const LS = {progress:"hablamos_progress", custom:"hablamos_custom", log:"hablamos_log", sel:"hablamos_sel", goal:"hablamos_goal"};
 const load = (k,f)=>{try{return JSON.parse(localStorage.getItem(k)) ?? f}catch{return f}};
 const save = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
 let progress = load(LS.progress, {});     // id -> {reps, iv, ease, due}
@@ -364,7 +459,8 @@ function allCards(){
   }
   return out;
 }
-const todayKey = ()=>new Date().toISOString().slice(0,10);
+const dateKey = d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const todayKey = ()=>dateKey(new Date());
 const now = ()=>Date.now();
 const dueCount = sel => allCards().filter(c=>sel.includes(c.deck) && (progress[c.id]?.due ?? 0) <= now()).length;
 
@@ -451,7 +547,9 @@ document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("clic
   document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
   $("tab-train").classList.toggle("hidden", b.dataset.tab!=="train");
   $("tab-library").classList.toggle("hidden", b.dataset.tab!=="library");
+  $("tab-stats").classList.toggle("hidden", b.dataset.tab!=="stats");
   if(b.dataset.tab==="library") renderLibrary();
+  if(b.dataset.tab==="stats") renderStats();
 }));
 
 /* Setup */
@@ -516,7 +614,7 @@ function nextCard(){
   $("cardDe").textContent = cur.de;
   $("cardEs").classList.add("hidden"); $("cardEs").innerHTML="";
   $("heardBox").classList.add("hidden"); $("scoreBox").classList.add("hidden");
-  $("grades").classList.add("hidden");
+  $("grades").classList.add("hidden"); $("micStatus").textContent="";
   $("micBtn").classList.toggle("hidden", !SR);
   if(mode==="shadow"){
     $("cardDe").textContent = "Hör zu und sprich nach"; // Prompt ist das Audio
@@ -551,17 +649,36 @@ document.querySelectorAll(".grade").forEach(b=>b.addEventListener("click", ()=>{
 }));
 
 /* Aufnahme */
+let recogTimer=null, gotResult=false, recogFailed=false;
+const MIC_ERRORS = {
+  "no-speech":"Nichts gehört – bitte gleich nach dem Antippen laut sprechen.",
+  "audio-capture":"Kein Mikrofon gefunden. Ist eines angeschlossen und ausgewählt?",
+  "not-allowed":"Kein Mikrofon-Zugriff. Bitte in den Browser-Einstellungen erlauben.",
+  "service-not-allowed":"Die Spracherkennung ist hier blockiert. Öffne die App direkt: hablamos-constantin-veyder-malbergs-projects.vercel.app",
+  "network":"Die Spracherkennung ist hier nicht erreichbar – in eingebetteten Fenstern oft blockiert. Öffne die App direkt: hablamos-constantin-veyder-malbergs-projects.vercel.app",
+  "language-not-supported":"Dieser Browser kann kein Spanisch erkennen – bitte Chrome oder Edge verwenden."
+};
 $("micBtn").addEventListener("click", ()=>{
-  if(recog){ stopListening(); return; }
+  if(recog){ try{recog.stop();}catch{} return; }
   if(!SR) return;
   if(synth) synth.cancel();
   recog = new SR();
-  recog.lang="es-ES"; recog.interimResults=false; recog.maxAlternatives=3;
+  recog.lang="es-ES"; recog.interimResults=true; recog.maxAlternatives=3;
+  gotResult=false; recogFailed=false;
   $("micBtn").classList.add("listening");
   $("micBtn").setAttribute("aria-label","Aufnahme stoppen");
+  $("micStatus").textContent="Ich höre zu – sprich jetzt …";
   recog.onresult = e=>{
+    const res = e.results[e.results.length-1];
+    if(!res.isFinal){
+      // Live anzeigen, was bereits verstanden wird
+      $("heardTxt").textContent = res[0].transcript+" …";
+      $("heardBox").classList.remove("hidden");
+      return;
+    }
+    gotResult=true;
     let best={score:-1, text:"", hits:new Set()};
-    for(const alt of e.results[0]){
+    for(const alt of res){
       const r = compare(cur.es, alt.transcript);
       if(r.score>best.score) best={...r, text:alt.transcript};
     }
@@ -572,20 +689,27 @@ $("micBtn").addEventListener("click", ()=>{
     pill.textContent = good ? `${best.score} % – ¡muy bien!` : `${best.score} % – fast!`;
     pill.className = "scorepill " + (good?"good":"bad");
     $("scoreBox").classList.remove("hidden");
+    $("micStatus").textContent="";
     reveal(best);
   };
   recog.onerror = e=>{
-    stopListening();
-    if(e.error==="not-allowed" || e.error==="service-not-allowed"){
-      $("heardTxt").textContent="Kein Mikrofon-Zugriff. Bitte Mikrofon erlauben oder die Datei direkt im Browser öffnen.";
-      $("heardBox").classList.remove("hidden");
-    }
+    if(e.error==="aborted") return;
+    recogFailed=true;
+    $("micStatus").textContent = MIC_ERRORS[e.error] || ("Aufnahme-Fehler: "+e.error+" – bitte noch einmal versuchen.");
   };
-  recog.onend = ()=>stopListening();
-  try{ recog.start(); }catch{ stopListening(); }
+  recog.onend = ()=>{
+    stopListening();
+    if(!gotResult && !recogFailed)
+      $("micStatus").textContent="Nichts erkannt – noch einmal antippen und deutlich sprechen.";
+  };
+  // Sicherheitsnetz: nach 10 s automatisch stoppen, falls nichts passiert
+  recogTimer = setTimeout(()=>{ if(recog){ try{recog.stop();}catch{} } }, 10000);
+  try{ recog.start(); }
+  catch(err){ recogFailed=true; $("micStatus").textContent="Aufnahme konnte nicht starten: "+err.message; stopListening(); }
 });
 function stopListening(){
-  if(recog){ try{recog.abort();}catch{} recog=null; }
+  if(recogTimer){ clearTimeout(recogTimer); recogTimer=null; }
+  if(recog){ const r=recog; recog=null; try{r.abort();}catch{} }
   $("micBtn").classList.remove("listening");
   $("micBtn").setAttribute("aria-label","Aufnahme starten");
 }
@@ -667,6 +791,49 @@ $("importBtn").addEventListener("click", ()=>{
     $("ioNote").textContent="Import erfolgreich.";
     renderLibrary(); refreshStats(); renderChips(); updateQueueNote();
   }catch{ $("ioNote").textContent="Das war kein gültiges Backup-JSON."; }
+});
+
+/* ─────────────────────── Fortschritt ───────────────────── */
+const WD = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+function renderStats(){
+  const goal = load(LS.goal, 60);
+  $("goalInput").value = goal;
+  const nowD = new Date();
+  const monday = new Date(nowD); monday.setDate(nowD.getDate() - (nowD.getDay()+6)%7);
+  let week = 0;
+  for(let i=0;i<7;i++){ const d=new Date(monday); d.setDate(monday.getDate()+i); week += log[dateKey(d)]||0; }
+  $("stWeek").textContent = week;
+  $("goalFill").style.width = Math.min(100, week/goal*100) + "%";
+  const cards = allCards();
+  const started = cards.filter(c=>progress[c.id] && progress[c.id].reps>0).length;
+  $("stStarted").textContent = `${started} / ${cards.length}`;
+  $("stSolid").textContent = cards.filter(c=>progress[c.id] && progress[c.id].iv>=7).length;
+  $("stDue2").textContent = dueCount(DECKS.map(d=>d.id));
+  // 14-Tage-Diagramm
+  const days=[]; for(let i=13;i>=0;i--){ const d=new Date(nowD); d.setDate(nowD.getDate()-i); days.push(d); }
+  const vals = days.map(d=>log[dateKey(d)]||0);
+  const max = Math.max(1, ...vals);
+  $("chart14").innerHTML = days.map((d,i)=>{
+    const v = vals[i], today = i===13;
+    const showV = v>0 && (today || v===Math.max(...vals));
+    return `<div class="col${today?' today':''}" title="${WD[d.getDay()]} ${d.getDate()}.${d.getMonth()+1}.: ${v} Sätze">`
+      + `<span class="v">${showV?v:""}</span>`
+      + `<div class="barwrap"><div class="bar" style="height:${Math.round(v/max*100)}%"></div></div>`
+      + `<span class="d">${WD[d.getDay()]}</span></div>`;
+  }).join("");
+  // Pro Szenario
+  $("deckStats").innerHTML = DECKS.map(d=>{
+    const ph = cards.filter(c=>c.deck===d.id);
+    const st = ph.filter(c=>progress[c.id] && progress[c.id].reps>0).length;
+    const pct = ph.length ? Math.round(st/ph.length*100) : 0;
+    return `<div class="deckstat"><span class="name">${esc(d.name)}</span>`
+      + `<div class="mini"><div style="width:${pct}%"></div></div>`
+      + `<span class="nums">${st} / ${ph.length}</span></div>`;
+  }).join("");
+}
+$("goalInput").addEventListener("change", ()=>{
+  const g = Math.max(10, +$("goalInput").value || 60);
+  save(LS.goal, g); renderStats();
 });
 
 /* Start */
