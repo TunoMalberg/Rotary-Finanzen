@@ -162,6 +162,9 @@ details.deck summary .n{font-size:.8rem; color:var(--muted); font-weight:500; fo
 .iconbtn svg{width:19px; height:19px}
 .iconbtn.danger{color:var(--err)}
 form.addform{display:grid; gap:10px; margin-top:14px}
+.suggestrow{display:flex; gap:8px}
+.suggestrow input{flex:1; min-width:0}
+.suggestrow button{flex-shrink:0}
 form.addform input, form.addform select, textarea{
   width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
   background:var(--surface); color:var(--ink); font:inherit;
@@ -279,7 +282,10 @@ footer.foot a{color:var(--sea)}
       <p class="sub">Was wolltest du auf Mallorca sagen und konntest es nicht? Hier eintragen – es landet im Training.</p>
       <form class="addform" id="addForm">
         <input required id="addDe" placeholder="Deutsch – z. B. Können Sie mir helfen?">
-        <input required id="addEs" placeholder="Spanisch – z. B. ¿Puede ayudarme?">
+        <div class="suggestrow">
+          <input required id="addEs" placeholder="Spanisch – z. B. ¿Puede ayudarme?">
+          <button class="btn small secondary" type="button" id="suggestBtn">Vorschlag</button>
+        </div>
         <select id="addDeck"></select>
         <button class="btn" type="submit">Hinzufügen</button>
       </form>
@@ -788,6 +794,32 @@ for(const d of DECKS){
   const o = document.createElement("option"); o.value=d.id; o.textContent=d.name;
   $("addDeck").appendChild(o);
 }
+/* Übersetzungsvorschlag (MyMemory, kostenlos, ohne Schlüssel) */
+$("suggestBtn").addEventListener("click", async ()=>{
+  const de = $("addDe").value.trim();
+  if(!de){ $("ioNote").textContent="Bitte zuerst den deutschen Satz eingeben."; $("addDe").focus(); return; }
+  const btn = $("suggestBtn");
+  btn.disabled = true; btn.textContent = "…";
+  $("ioNote").textContent = "Hole Übersetzungsvorschlag …";
+  try{
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), 8000);
+    const res = await fetch("https://api.mymemory.translated.net/get?q="+encodeURIComponent(de)+"&langpair=de|es", {signal:ctrl.signal});
+    clearTimeout(t);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const data = await res.json();
+    let text = data?.responseData?.translatedText || "";
+    // HTML-Entities dekodieren (MyMemory liefert z. B. &#39;)
+    const ta = document.createElement("textarea"); ta.innerHTML = text; text = ta.value.trim();
+    if(!text || /^MYMEMORY WARNING/i.test(text)) throw new Error("keine Übersetzung");
+    $("addEs").value = text;
+    $("ioNote").textContent = "Vorschlag eingefügt – bitte prüfen und bei Bedarf anpassen, dann „Hinzufügen“.";
+  }catch{
+    $("ioNote").textContent = "Übersetzungsdienst gerade nicht erreichbar – bitte später versuchen oder selbst eintragen.";
+  }
+  btn.disabled = false; btn.textContent = "Vorschlag";
+});
+
 $("addForm").addEventListener("submit", e=>{
   e.preventDefault();
   custom.push({id:"c"+now()+Math.floor(Math.random()*1e4), deck:$("addDeck").value, de:$("addDe").value.trim(), es:$("addEs").value.trim()});
