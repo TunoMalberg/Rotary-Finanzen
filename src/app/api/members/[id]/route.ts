@@ -7,7 +7,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
   const data = {
     lastName: body.lastName,
     firstName: body.firstName,
@@ -23,7 +24,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     status: body.status || "ACTIVE",
     notes: body.notes || null,
   };
-  const m = await prisma.member.update({ where: { id }, data });
+  let m;
+  try {
+    m = await prisma.member.update({ where: { id }, data });
+  } catch (e) {
+    if (e && typeof e === "object" && (e as { code?: string }).code === "P2025")
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
+  }
   return NextResponse.json(m);
 }
 

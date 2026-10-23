@@ -30,6 +30,9 @@ export async function GET(
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "private, max-age=300",
+        "Content-Security-Policy":
+          "default-src 'none'; img-src data: https:; style-src 'unsafe-inline'",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }

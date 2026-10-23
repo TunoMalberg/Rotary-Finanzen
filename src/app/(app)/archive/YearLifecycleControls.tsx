@@ -321,7 +321,7 @@ function ImportTrigger({ busy, onPick }: { busy: boolean; onPick: (file: File, d
         }}
       />
       <input type="checkbox" className="ml-2" checked={del} onChange={(e) => setDel(e.target.checked)} title="Buchungen, die nicht mehr im Excel stehen, soft-löschen" />
-      <span className="text-[10px] text-slate-500">missing löschen</span>
+      <span className="text-[10px] text-slate-500">Fehlende Buchungen löschen</span>
     </label>
   );
 }

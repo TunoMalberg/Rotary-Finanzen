@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions, canRead } from "@/lib/auth";
 
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -24,6 +26,14 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getServerSession(authOptions);
+  if (!canRead(session?.user?.role)) {
+    return new Response(JSON.stringify({ error: "forbidden" }), {
+      status: 403,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   const { id } = await params;
   const project = await prisma.project.findUnique({ where: { id } });
   if (!project) return new Response("not found", { status: 404 });

@@ -224,33 +224,66 @@ function buildAbschluss(
   txs: AccountTxRow[],
   budgetLines: (BudgetLine & { category: Category })[],
 ): XLSX.WorkSheet {
-  // Aggregate per category
-  const totals = new Map<string, { name: string; kind: string; amount: number }>();
+  // Aggregate per category – erfasst ALLE übergebenen (nicht-gelöschten) Buchungen.
+  // NEUTRAL-Kategorien und Buchungen ohne Kategorie werden nach Vorzeichen den
+  // Einnahmen (amount > 0) bzw. Ausgaben (amount < 0) zugeordnet, damit der
+  // Abschluss keine Beträge unterschlägt. Unkategorisierte Buchungen laufen in
+  // einer Sammelzeile „Ohne Kategorie" (je Vorzeichen) zusammen.
+  const UNCAT_KEY = "__uncategorized__";
+  const totals = new Map<string, { name: string; kind: string; amount: number; pos: number; neg: number }>();
+  let sumAll = 0;
   for (const t of txs) {
-    if (!t.category) continue;
-    const cur = totals.get(t.category.id) ?? { name: t.category.name, kind: t.category.kind, amount: 0 };
+    sumAll += t.amount;
+    const key = t.category?.id ?? UNCAT_KEY;
+    const cur =
+      totals.get(key) ?? {
+        name: t.category?.name ?? "Ohne Kategorie",
+        kind: t.category?.kind ?? "NEUTRAL",
+        amount: 0,
+        pos: 0,
+        neg: 0,
+      };
     cur.amount += t.amount;
-    totals.set(t.category.id, cur);
+    if (t.amount > 0) cur.pos += t.amount;
+    else cur.neg += t.amount;
+    totals.set(key, cur);
   }
   const budgetByCat = new Map(budgetLines.map((b) => [b.categoryId, b.amount]));
   const incomeRows: { name: string; ist: number; soll: number }[] = [];
   const expenseRows: { name: string; ist: number; soll: number }[] = [];
+  // Kategorie → Zeilen. Vorzeichen-Sonderfälle (z. B. INCOME-Kategorie mit
+  // negativem Saldo) landen im jeweils anderen Block, damit die Kontrollsumme
+  // (Einnahmen − Ausgaben = Σ aller Beträge) exakt aufgeht.
+  const pushRows = (
+    name: string,
+    kind: string,
+    t: { amount: number; pos: number; neg: number } | undefined,
+    soll: number,
+  ) => {
+    const net = t?.amount ?? 0;
+    if (kind === "INCOME") {
+      incomeRows.push({ name, ist: round2(Math.max(0, net)), soll: round2(soll) });
+      if (net < 0) expenseRows.push({ name, ist: round2(-net), soll: 0 });
+    } else if (kind === "EXPENSE") {
+      expenseRows.push({ name, ist: round2(Math.abs(Math.min(0, net))), soll: round2(soll) });
+      if (net > 0) incomeRows.push({ name, ist: round2(net), soll: 0 });
+    } else {
+      // NEUTRAL / ohne Kategorie: nach Vorzeichen aufteilen
+      const pos = t?.pos ?? 0;
+      const neg = t?.neg ?? 0;
+      if (pos > 0) incomeRows.push({ name, ist: round2(pos), soll: 0 });
+      if (neg < 0) expenseRows.push({ name, ist: round2(-neg), soll: 0 });
+    }
+  };
   // Sort by sortOrder via budgetLines / fallback
   const seen = new Set<string>();
   for (const bl of budgetLines.sort((a, b) => a.category.sortOrder - b.category.sortOrder)) {
     seen.add(bl.categoryId);
-    const t = totals.get(bl.categoryId);
-    const ist = bl.category.kind === "INCOME" ? Math.max(0, t?.amount ?? 0) : Math.abs(Math.min(0, t?.amount ?? 0));
-    const row = { name: bl.category.name, ist: round2(ist), soll: round2(bl.amount) };
-    if (bl.category.kind === "INCOME") incomeRows.push(row);
-    else if (bl.category.kind === "EXPENSE") expenseRows.push(row);
+    pushRows(bl.category.name, bl.category.kind, totals.get(bl.categoryId), bl.amount);
   }
   for (const [catId, t] of totals) {
     if (seen.has(catId)) continue;
-    const ist = t.kind === "INCOME" ? Math.max(0, t.amount) : Math.abs(Math.min(0, t.amount));
-    const row = { name: t.name, ist: round2(ist), soll: 0 };
-    if (t.kind === "INCOME") incomeRows.push(row);
-    else if (t.kind === "EXPENSE") expenseRows.push(row);
+    pushRows(t.name, t.kind, t, 0);
   }
 
   const rows: (string | number | null)[][] = [];
@@ -287,6 +320,12 @@ function buildAbschluss(
   rows.push([null, null, null, round2(sumIstOut), round2(sumSollOut), sumSollOut > 0 ? (sumIstOut - sumSollOut) / sumSollOut : 0]);
   rows.push([null]);
   rows.push(["Saldo", null, null, round2(sumIstIn - sumIstOut), round2(sumSollIn - sumSollOut), null]);
+  // Kontrollsumme: (Einnahmen − Ausgaben) muss der Summe ALLER Buchungen entsprechen.
+  rows.push(["Kontrollsumme (Σ aller Buchungen)", null, null, round2(sumAll), null, null]);
+  const kontrollDiff = round2(round2(sumIstIn - sumIstOut) - round2(sumAll));
+  if (kontrollDiff !== 0) {
+    rows.push(["Rundungsdifferenz", null, null, kontrollDiff, null, null]);
+  }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{ wch: 42 }, { wch: 4 }, { wch: 4 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
@@ -434,10 +473,34 @@ export function parseEarWorkbookForImport(buf: Buffer): { rows: ImportRow[]; she
     // txId is in column AFTER KONTO ("Anmerkung" right-most). We'll search for any non-empty trailing UUID-like value.
     const txIdCol = header.findIndex((h, i) => i > kontoCol && typeof h === "string" && /anmerkung/i.test(h as string));
 
+    // Blocktrennung Einnahmen-/Ausgaben-Spalten erkennen: Die Sektionszeile
+    // direkt über dem Header trägt "Einnahmen" (ab Spalte 4) und "Ausgaben"
+    // (ab Spalte 4 + incomeWidth). Nur wenn der "Ausgaben"-Marker eindeutig
+    // gefunden wird, werden positive Werte im Ausgabenblock negiert (manuell
+    // im Excel positiv eingetragene Ausgaben). Der App-Export schreibt
+    // Ausgaben bereits negativ – dieser Roundtrip bleibt unverändert, denn
+    // negative Werte werden nie umgedreht. Ohne eindeutigen Marker wird
+    // NICHTS verändert (Vorzeichen wie in der Datei).
+    let expenseStart = -1;
+    const sectionRow = headerIdx > 0 ? rows[headerIdx - 1] : null;
+    if (Array.isArray(sectionRow)) {
+      for (let c = 5; c < kontoCol; c++) {
+        const v = sectionRow[c];
+        if (typeof v === "string" && /^ausgaben$/i.test(v.trim())) {
+          expenseStart = c;
+          break;
+        }
+      }
+    }
+
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const r = rows[i] as (string | number | Date | null)[];
-      const date = r[0];
-      if (!(date instanceof Date)) continue;
+      const rawDate = r[0];
+      if (!(rawDate instanceof Date) || isNaN(rawDate.getTime())) continue;
+      // Zeitzonen-Normalisierung: SheetJS (cellDates:true) erzeugt Date-Zellen
+      // in Server-Lokalzeit. Auf UTC-Mitternacht normalisieren, damit
+      // Datums-Vergleich und -Speicherung unabhängig von der Server-TZ sind.
+      const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
       const counterparty = (typeof r[1] === "string" ? (r[1] as string) : "") ?? "";
       const code = typeof r[2] === "string" ? (r[2] as string) : null;
       const purposeRaw = r[3];
@@ -447,7 +510,9 @@ export function parseEarWorkbookForImport(buf: Buffer): { rows: ImportRow[]; she
       for (let c = 4; c < kontoCol; c++) {
         const v = r[c];
         if (typeof v === "number" && v !== 0) {
-          amount += v;
+          // Im Ausgabenblock positive Werte als Ausgabe (negativ) werten;
+          // negative Ausgaben bleiben negativ.
+          amount += expenseStart >= 0 && c >= expenseStart && v > 0 ? -v : v;
           if (!bucketHeader && typeof header[c] === "string") bucketHeader = (header[c] as string).trim();
         }
       }

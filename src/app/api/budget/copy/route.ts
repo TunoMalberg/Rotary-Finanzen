@@ -6,7 +6,9 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const { sourceYearId, targetYearId } = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
+  const { sourceYearId, targetYearId } = body;
   const src = await prisma.budgetLine.findMany({ where: { clubYearId: sourceYearId } });
   for (const s of src) {
     await prisma.budgetLine.upsert({

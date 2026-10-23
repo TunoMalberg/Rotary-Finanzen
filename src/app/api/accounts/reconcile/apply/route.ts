@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   if (!isTreasurer(session?.user?.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const accountId: string = body.accountId;
   const clubYearId: string = body.clubYearId;
   const addRows: Array<{

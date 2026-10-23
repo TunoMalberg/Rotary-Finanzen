@@ -6,7 +6,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const { label } = await req.json();
+  const { label } = await req.json().catch(() => ({}));
   if (!/^\d{4}\/\d{4}$/.test(label)) return NextResponse.json({ error: "Format YYYY/YYYY erwartet" }, { status: 400 });
   const [a, b] = label.split("/").map(Number);
   if (b !== a + 1) return NextResponse.json({ error: "Jahre nicht aufeinanderfolgend" }, { status: 400 });

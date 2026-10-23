@@ -6,7 +6,8 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
   const clubYearId = String(body.clubYearId);
   const lines = body.lines as { categoryId: string; amount: number }[];
   for (const l of lines) {

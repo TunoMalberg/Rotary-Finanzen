@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isTreasurer(session?.user?.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
-  const { transactionIds, unassign } = await req.json();
+  const { transactionIds, unassign } = await req.json().catch(() => ({}));
   if (!Array.isArray(transactionIds) || transactionIds.length === 0)
     return NextResponse.json({ error: "no transactionIds" }, { status: 400 });
 

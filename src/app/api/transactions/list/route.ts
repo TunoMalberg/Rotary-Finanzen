@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions, canRead } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!canRead(session?.user?.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? "1000"), 5000);
   const txs = await prisma.transaction.findMany({

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions, isTreasurer } from "@/lib/auth";
 import { parseEarWorkbookForImport, type ImportRow } from "@/lib/earExcel";
 import { autoCategoryName } from "@/lib/categorize";
+import { ensureClubYearForDate } from "@/lib/clubYearLifecycle";
 
 /**
  * POST /api/clubyears/:id/import
@@ -195,9 +196,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // commit
+
+  // Datumskorrektur über die Clubjahresgrenze: Wandert das neue Datum aus dem
+  // Jahr `cy` hinaus, muss die clubYearId mitgezogen werden (gleiches Muster
+  // wie PATCH /api/transactions/[id] via ensureClubYearForDate). Auflösung vor
+  // der DB-Transaktion, da ensureClubYearForDate das globale prisma nutzt.
+  const yearIdByTxId = new Map<string, string>();
+  for (const a of actions) {
+    if (a.kind !== "update" || !a.changed.includes("date")) continue;
+    const d = a.after.date;
+    if (d >= cy.startsAt && d <= cy.endsAt) continue;
+    const target = await ensureClubYearForDate(d);
+    if (target.lockedAt) {
+      return NextResponse.json(
+        {
+          error: `Buchung "${a.after.counterparty || a.txId}" (${d.toISOString().slice(0, 10)}) fällt in das fixierte Clubjahr ${target.label} – Import abgebrochen.`,
+        },
+        { status: 409 },
+      );
+    }
+    yearIdByTxId.set(a.txId, target.id);
+  }
+
   const tx = await prisma.$transaction(async (txdb) => {
     for (const a of actions) {
       if (a.kind === "update") {
+        const newYearId = yearIdByTxId.get(a.txId);
         await txdb.transaction.update({
           where: { id: a.txId },
           data: {
@@ -207,6 +231,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             code: a.after.code ?? null,
             amount: a.after.amount,
             categoryId: a.after.categoryId,
+            ...(newYearId ? { clubYearId: newYearId } : {}),
           },
         });
       } else if (a.kind === "create") {

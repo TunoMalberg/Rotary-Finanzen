@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions, canRead } from "@/lib/auth";
 
 export async function GET(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!canRead(session?.user?.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const yearLabel = url.searchParams.get("year");
   const categoryName = url.searchParams.get("category");

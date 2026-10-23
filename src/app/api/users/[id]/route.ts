@@ -10,7 +10,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
 
   const data: { name?: string; role?: string; email?: string; passwordHash?: string } = {};
 
@@ -43,7 +43,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (Object.keys(data).length === 0)
     return NextResponse.json({ error: "Keine Änderungen übergeben." }, { status: 400 });
 
-  const u = await prisma.user.update({ where: { id }, data });
+  let u;
+  try {
+    u = await prisma.user.update({ where: { id }, data });
+  } catch (e) {
+    if (e && typeof e === "object" && (e as { code?: string }).code === "P2025")
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
+  }
   return NextResponse.json({ id: u.id, email: u.email, name: u.name, role: u.role });
 }
 
@@ -52,6 +59,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
   if (id === session?.user?.id) return NextResponse.json({ error: "Eigenen Account nicht löschbar" }, { status: 400 });
-  await prisma.user.delete({ where: { id } });
+  try {
+    await prisma.user.delete({ where: { id } });
+  } catch (e) {
+    if (e && typeof e === "object" && (e as { code?: string }).code === "P2025")
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
+  }
   return NextResponse.json({ ok: true });
 }

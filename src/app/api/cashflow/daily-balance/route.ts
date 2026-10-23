@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions, canRead } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,11 @@ export const runtime = "nodejs";
  * Clubjahres. Maximaler Bereich: 6 Jahre.
  */
 export async function GET(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!canRead(session?.user?.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const fromStr = url.searchParams.get("from");
   const toStr = url.searchParams.get("to");

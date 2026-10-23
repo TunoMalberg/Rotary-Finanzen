@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   if (!body.code || !body.name)
     return NextResponse.json({ error: "code and name required" }, { status: 400 });
 

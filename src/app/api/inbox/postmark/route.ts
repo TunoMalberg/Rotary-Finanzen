@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadBlob } from "@/lib/blobStorage";
@@ -9,6 +10,19 @@ import {
 import { findMatchCandidates, shouldAutoLink } from "@/lib/mailMatch";
 
 export const maxDuration = 60;
+
+/**
+ * Konstant-zeitiger String-Vergleich.
+ * Bei ungleicher Länge sofort `false` – ohne die erwartete Länge preiszugeben.
+ * Leere Werte gelten nie als gültig.
+ */
+function safeEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 /**
  * POST /api/inbox/postmark
@@ -34,14 +48,14 @@ export async function POST(req: Request) {
   const expectedPass = (process.env.POSTMARK_INBOUND_PASSWORD ?? "").trim();
   const tokenEnv = (process.env.POSTMARK_INBOUND_TOKEN ?? "").trim();
   const url = new URL(req.url);
+  // Token bevorzugt aus HTTP-Header (kein Log-/Referrer-Leak wie bei ?token=…),
+  // Query als Fallback für Regressionssicherheit bestehender Webhook-URLs.
+  const tokenHeader = (req.headers.get("x-postmark-token") ?? "").trim();
   const tokenQuery = (url.searchParams.get("token") ?? "").trim();
-
-  // Diagnose-Endpoint: GET liefert (ohne Secrets) zurück, was konfiguriert ist
-  // → erlaubt schnelles Debuggen via Browser
-  // (für POST irrelevant; Postmark ruft immer mit POST auf)
+  const tokenGiven = tokenHeader || tokenQuery;
 
   if (!expectedUser && !expectedPass && !tokenEnv) {
-    console.error("[postmark] 503 – no auth configured (set POSTMARK_INBOUND_USER+PASSWORD or POSTMARK_INBOUND_TOKEN in Vercel + Redeploy)");
+    console.error("[postmark] 503 – no auth configured");
     return NextResponse.json(
       {
         error: "not configured",
@@ -53,49 +67,48 @@ export async function POST(req: Request) {
 
   const auth = req.headers.get("authorization") ?? "";
   let authOk = false;
+  // Reason nur grob (keine Token-/Konfig-Details), ausschließlich zur Diagnose.
   let authReason = "no-credentials";
 
-  // Variante 1: Token via Query (?token=…) – funktioniert auch bei URL-Redirects
-  if (tokenQuery) {
-    if (tokenEnv && tokenQuery === tokenEnv) {
+  // Variante 1: Token via Header (bevorzugt) oder Query (Fallback)
+  if (tokenGiven) {
+    if (safeEqual(tokenGiven, tokenEnv)) {
       authOk = true;
-    } else if (!tokenEnv) {
-      authReason = "token-given-but-POSTMARK_INBOUND_TOKEN-env-not-set";
     } else {
-      authReason = `token-mismatch (got len=${tokenQuery.length}, expected len=${tokenEnv.length})`;
+      authReason = "token-invalid";
     }
   }
   // Variante 2: HTTP Basic
   else if (auth) {
     const m = auth.match(/^Basic\s+(.+)$/i);
     if (!m) {
-      authReason = "header-not-basic";
+      authReason = "auth-invalid";
     } else {
       try {
         const decoded = Buffer.from(m[1], "base64").toString("utf-8");
         const idx = decoded.indexOf(":");
         if (idx < 0) {
-          authReason = "decoded-no-colon";
+          authReason = "auth-invalid";
         } else {
           const user = decoded.slice(0, idx);
           const pass = decoded.slice(idx + 1);
-          if (expectedUser && expectedPass && user === expectedUser && pass === expectedPass) {
+          if (safeEqual(user, expectedUser) && safeEqual(pass, expectedPass)) {
             authOk = true;
           } else {
-            authReason = `basic-creds-mismatch (got user='${user}', len(pass)=${pass.length}; expected user='${expectedUser}', len(pass)=${expectedPass.length})`;
+            authReason = "auth-invalid";
           }
         }
-      } catch (e) {
-        authReason = `decode-error: ${e instanceof Error ? e.message : String(e)}`;
+      } catch {
+        authReason = "auth-invalid";
       }
     }
   } else {
-    authReason = "no-authorization-header-and-no-token-query";
+    authReason = "no-credentials";
   }
 
   if (!authOk) {
-    console.error(`[postmark] 401 – ${authReason}; url=${req.url}; tokenEnv-set=${!!tokenEnv} tokenEnv-len=${tokenEnv.length} userEnv-set=${!!expectedUser} passEnv-set=${!!expectedPass}`);
-    return NextResponse.json({ error: "auth", reason: authReason }, { status: 401 });
+    console.error(`[postmark] 401 – ${authReason}`);
+    return NextResponse.json({ error: "auth" }, { status: 401 });
   }
 
   // ------- Payload -------
@@ -276,37 +289,12 @@ async function processInbound(body: PostmarkInboundPayload) {
 /**
  * GET /api/inbox/postmark
  *
- * Diagnose-Endpoint (KEINE Secrets!). Zeigt nur, OB ENVs gesetzt sind und
- * ob der ?token=… mit dem ENV-Wert übereinstimmt – ohne Werte preiszugeben.
+ * Harmlose Statusmeldung (Liveness). Gibt bewusst KEINE Konfigurations- oder
+ * Token-Informationen preis. Der Webhook selbst wird ausschließlich per POST
+ * aufgerufen.
  */
-export function GET(req: Request) {
-  const url = new URL(req.url);
-  const tokenQuery = (url.searchParams.get("token") ?? "").trim();
-  const tokenEnv = (process.env.POSTMARK_INBOUND_TOKEN ?? "").trim();
-  const userEnv = (process.env.POSTMARK_INBOUND_USER ?? "").trim();
-  const passEnv = (process.env.POSTMARK_INBOUND_PASSWORD ?? "").trim();
-  return NextResponse.json({
-    ok: true,
-    env: {
-      POSTMARK_INBOUND_TOKEN_set: !!tokenEnv,
-      POSTMARK_INBOUND_TOKEN_len: tokenEnv.length,
-      POSTMARK_INBOUND_USER_set: !!userEnv,
-      POSTMARK_INBOUND_PASSWORD_set: !!passEnv,
-    },
-    request: {
-      tokenQuery_given: !!tokenQuery,
-      tokenQuery_len: tokenQuery.length,
-      tokenQuery_matches_env: !!tokenEnv && tokenQuery === tokenEnv,
-    },
-    hint:
-      tokenEnv && tokenQuery && tokenQuery !== tokenEnv
-        ? `Token-Query (${tokenQuery.length} chars) ≠ ENV-Wert (${tokenEnv.length} chars). Whitespace? Andere Schreibweise?`
-        : !tokenEnv
-          ? "POSTMARK_INBOUND_TOKEN ist nicht gesetzt (oder leer). Vercel → Settings → ENV hinzufügen + Production anhaken + Redeploy."
-          : tokenEnv && tokenQuery && tokenQuery === tokenEnv
-            ? "✅ Auth würde durchgehen."
-            : "Kein Token in Query – ruf mit ?token=… auf um zu testen.",
-  });
+export function GET() {
+  return NextResponse.json({ ok: true });
 }
 
 /* -------------------- Postmark Payload (subset) -------------------- */

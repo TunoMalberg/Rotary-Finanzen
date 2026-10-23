@@ -6,7 +6,7 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const clubYearId = String(body.clubYearId);
   const cy = await prisma.clubYear.findUnique({ where: { id: clubYearId } });
   if (!cy) return NextResponse.json({ error: "no clubyear" }, { status: 400 });

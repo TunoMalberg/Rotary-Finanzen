@@ -9,7 +9,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isTreasurer(session?.user?.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
   if (body.code !== undefined) data.code = String(body.code).trim().toUpperCase().replace(/\s+/g, "");
   if (body.name !== undefined) data.name = String(body.name).trim();
@@ -47,6 +47,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   // Detach transactions; keep category for historic bookings already on it.
   await prisma.transaction.updateMany({ where: { projectId: id }, data: { projectId: null } });
-  await prisma.project.delete({ where: { id } });
+  try {
+    await prisma.project.delete({ where: { id } });
+  } catch (e) {
+    if (e && typeof e === "object" && (e as { code?: string }).code === "P2025")
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
+  }
   return NextResponse.json({ ok: true });
 }

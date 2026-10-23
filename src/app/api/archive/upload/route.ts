@@ -65,16 +65,41 @@ export async function POST(req: Request) {
         }
       }
     }
+    // Blocktrennung Einnahmen-/Ausgaben-Spalten: Die Sektionszeile über dem
+    // Header trägt "Ausgaben" am Beginn des Ausgabenblocks. Nur wenn dieser
+    // Marker eindeutig gefunden wird, werden positive Werte im Ausgabenblock
+    // negiert (historische Dateien tragen Ausgaben teils positiv ein).
+    // Negative Ausgaben (App-Export-Format) bleiben immer negativ; ohne
+    // eindeutigen Marker wird nichts verändert.
+    let expenseStart = -1;
+    if (headerIdx > 0) {
+      const above = rows[headerIdx - 1];
+      if (Array.isArray(above)) {
+        for (let c = 5; c < kontoCol; c++) {
+          const v = above[c];
+          if (typeof v === "string" && /^ausgaben$/i.test((v as string).trim())) {
+            expenseStart = c; break;
+          }
+        }
+      }
+    }
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const r = rows[i] as (string | number | Date | null)[];
-      const date = r[0];
-      if (!(date instanceof Date)) continue;
+      const rawDate = r[0];
+      if (!(rawDate instanceof Date) || isNaN(rawDate.getTime())) continue;
+      // SheetJS (cellDates:true) liefert Server-Lokalzeit → auf UTC-Mitternacht
+      // normalisieren, damit das gespeicherte Datum TZ-unabhängig stabil ist.
+      const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
       const text = (r[1] as string) ?? "";
       const code = (r[2] as string) ?? null;
       const note = (r[3] as string) ?? null;
-      const numericRow = r.slice(4, kontoCol).map((v) => (typeof v === "number" ? v : 0));
       let amount = 0;
-      for (const v of numericRow) amount += Number(v) || 0;
+      for (let c = 4; c < kontoCol; c++) {
+        const v = r[c];
+        if (typeof v !== "number" || !Number.isFinite(v)) continue;
+        // Im Ausgabenblock positive Werte als Ausgabe (negativ) werten.
+        amount += expenseStart >= 0 && c >= expenseStart && v > 0 ? -v : v;
+      }
       if (amount === 0) continue;
       const cat = autoCategoryName({ purpose: `${text} ${note ?? ""}`, counterparty: text, code, amount });
       const categoryId = cat ? catByName.get(cat.name) ?? null : null;

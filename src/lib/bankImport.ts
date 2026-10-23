@@ -133,6 +133,14 @@ function parseAnyNumber(v: unknown): number {
   }
   // nur Punkt oder gar nichts → englisch / int
   const cleaned = s.replace(/[^0-9.\-+]/g, "");
+  // Eindeutiger deutscher Tausenderpunkt: genau EIN Punkt, KEIN Komma,
+  // exakt 3 Ziffern nach dem Punkt (und max. 3 davor, wie bei deutscher
+  // Tausendergruppierung): "1.234" → 1234. "12.50" (2 Nachkommastellen)
+  // bleibt Dezimalpunkt, "1.234,56" wurde oben bereits behandelt.
+  if (/^[-+]?\d{1,3}\.\d{3}$/.test(cleaned)) {
+    const n = Number.parseFloat(cleaned.replace(".", ""));
+    return Number.isFinite(n) ? n : 0;
+  }
   const n = Number.parseFloat(cleaned);
   return Number.isFinite(n) ? n : 0;
 }

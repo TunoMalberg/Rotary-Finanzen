@@ -27,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const tx = await loadTxAndYear(id);
   if (!tx) return NextResponse.json({ error: "not found" }, { status: 404 });
   const guard = checkClubYearMutable(tx.clubYear, { role: session?.user?.role, allowCorrection: !!body.allowCorrection });

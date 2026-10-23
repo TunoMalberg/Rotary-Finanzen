@@ -7,7 +7,7 @@ import { checkClubYearMutable, ensureClubYearForDate } from "@/lib/clubYearLifec
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isTreasurer(session?.user?.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const txDate = new Date(body.date);
   if (isNaN(txDate.getTime())) return NextResponse.json({ error: "Ungültiges Datum" }, { status: 400 });
 
