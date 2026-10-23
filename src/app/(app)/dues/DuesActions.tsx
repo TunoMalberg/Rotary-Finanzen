@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Mail, RefreshCw, Send } from "lucide-react";
+import { SepaExportControls } from "@/components/SepaExportControls";
 
 export function DuesActions({ clubYearId }: { clubYearId: string }) {
   const router = useRouter();
@@ -60,7 +61,8 @@ export function DuesActions({ clubYearId }: { clubYearId: string }) {
     router.refresh();
   }
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex gap-2 flex-wrap items-start">
+      <SepaExportControls initialClubYearId={clubYearId} />
       <button className="btn-ghost" onClick={reconcile} disabled={!!busy}>
         {busy === "rec" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Abgleich starten
       </button>

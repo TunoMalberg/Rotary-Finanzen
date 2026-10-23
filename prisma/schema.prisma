@@ -436,3 +436,12 @@ model ArchivedYear {
   summaryJson  String   // JSON string
   fileName     String?
 }
+
+/// Clubweite Einstellungen als einfache Key-Value-Ablage (z. B. SEPA-Konfiguration
+/// wie Creditor-ID, Auftraggeber-IBAN, Mandatsdatum). Keys werden mit Präfix
+/// gespeichert, z. B. `sepa.creditorId`.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

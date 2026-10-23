@@ -5,6 +5,7 @@ import {
   DatabaseBackup,
   FolderKanban,
   Inbox,
+  Landmark,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -57,6 +58,12 @@ const NAV: readonly NavItem[] = [
   { href: "/categories", label: "Kategorien", icon: Tags, treasurerOnly: true },
   { href: "/reports", label: "Vergleichscharts", icon: PieChart },
   { href: "/archive", label: "Archiv & Clubjahre", icon: Archive },
+  {
+    href: "/settings/sepa",
+    label: "SEPA-Einzug",
+    icon: Landmark,
+    treasurerOnly: true,
+  },
   {
     href: "/settings/users",
     label: "Benutzer",
