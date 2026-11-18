@@ -46,6 +46,7 @@ export default async function InboxPage() {
         id: m.id,
         from: m.fromName ? `${m.fromName} <${m.fromAddress}>` : m.fromAddress,
         subject: m.subject ?? "(kein Betreff)",
+        preview: (m.textBody ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
         receivedAt: m.receivedAt.toISOString(),
         extractedAmount: m.extractedAmount,
         extractedIban: m.extractedIban,

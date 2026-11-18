@@ -86,6 +86,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         account: true,
         member: true,
         attachment: true,
+        _count: { select: { attachmentLinks: true } },
         allocations: {
           include: {
             member: { select: { firstName: true, lastName: true } },
@@ -214,6 +215,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           memberName: t.member ? `${t.member.lastName}, ${t.member.firstName}` : null,
           attachmentName: t.attachment?.fileName ?? null,
           attachmentId: t.attachment?.id ?? null,
+          attachmentCount: t._count.attachmentLinks + (t.attachment ? 1 : 0),
           balanceAfter: balanceMap.get(t.id) ?? null,
           allocations: t.allocations.map((a) => ({
             id: a.id,

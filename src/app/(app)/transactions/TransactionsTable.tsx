@@ -32,6 +32,8 @@ export type TxRow = {
   memberName: string | null;
   attachmentName: string | null;
   attachmentId: string | null;
+  /** Gesamtzahl der Belege (Alt-Anhang + per Mail/Upload verknüpfte). */
+  attachmentCount: number;
   /** Laufender Saldo NACH dieser Buchung (Konto + Clubjahr). */
   balanceAfter: number | null;
   /** Aufteilungen aus SEPA-Sammeleinzug (leer wenn keine vorhanden). */
@@ -213,12 +215,21 @@ export function TransactionsTable({
                     )}
                   </td>
                   <td data-label="Beleg">
-                    {t.attachmentId ? (
+                    {t.attachmentCount === 0 ? (
+                      <span className="text-slate-300 text-sm">—</span>
+                    ) : t.attachmentId && t.attachmentCount === 1 ? (
                       <a className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1 break-all"
-                         href={`/api/attachments/${t.attachmentId}`} target="_blank" rel="noreferrer">
+                         href={`/api/attachments/${t.attachmentId}`} target="_blank" rel="noreferrer"
+                         title={t.attachmentName ?? "Anhang"}>
                         <Paperclip className="size-3.5 shrink-0" /> {t.attachmentName?.slice(0, 18) ?? "Anhang"}
                       </a>
-                    ) : <span className="text-slate-300 text-sm">—</span>}
+                    ) : (
+                      <Link href={`/transactions/${t.id}`}
+                         className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1"
+                         title={`${t.attachmentCount} Beleg(e) bei dieser Buchung ansehen`}>
+                        <Paperclip className="size-3.5 shrink-0" /> {t.attachmentCount} Beleg{t.attachmentCount > 1 ? "e" : ""}
+                      </Link>
+                    )}
                   </td>
                   <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>
                     {formatEUR(t.amount)}

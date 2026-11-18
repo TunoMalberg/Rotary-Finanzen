@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Paperclip, Loader2, X, Search, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { Mail, Paperclip, Loader2, X, Search, ExternalLink, Eye, CheckCircle2 } from "lucide-react";
 
 type Row = {
   id: string;
   from: string;
   subject: string;
+  preview: string;
   receivedAt: string;
   extractedAmount: number | null;
   extractedIban: string | null;
@@ -25,8 +27,10 @@ export function InboxTable({ rows }: { rows: Row[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchOpenFor, setSearchOpenFor] = useState<string | null>(null);
+  const [previewFor, setPreviewFor] = useState<Row | null>(null);
+  const [assigned, setAssigned] = useState<{ txId: string; label: string } | null>(null);
 
-  async function assign(mailId: string, transactionId: string) {
+  async function assign(mailId: string, transactionId: string, label?: string) {
     setBusyId(mailId);
     setError(null);
     try {
@@ -39,6 +43,8 @@ export function InboxTable({ rows }: { rows: Row[] }) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error ?? "Zuordnung fehlgeschlagen.");
       }
+      setAssigned({ txId: transactionId, label: label ?? "" });
+      setPreviewFor(null);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler.");
@@ -61,6 +67,26 @@ export function InboxTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="space-y-3">
+      {assigned && (
+        <div className="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 flex flex-wrap items-center gap-2">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span>Beleg der Buchung zugeordnet. Mail und Anhang sind jetzt bei der Buchung hinterlegt.</span>
+          <Link
+            href={`/transactions/${assigned.txId}`}
+            className="font-semibold underline inline-flex items-center gap-1"
+          >
+            Zur Buchung <ExternalLink className="size-3.5" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setAssigned(null)}
+            className="ml-auto btn-ghost text-xs"
+            title="Schließen"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm p-2">
           {error}
@@ -73,6 +99,11 @@ export function InboxTable({ rows }: { rows: Row[] }) {
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">{r.from}</div>
               <div className="text-sm text-slate-700 truncate">{r.subject}</div>
+              {r.preview && (
+                <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                  {r.preview}
+                </div>
+              )}
               <div className="text-xs text-slate-500 mt-0.5">
                 {new Date(r.receivedAt).toLocaleString("de-AT")}
                 {r.extractedAmount != null && (
@@ -92,22 +123,27 @@ export function InboxTable({ rows }: { rows: Row[] }) {
                   <> · <span className="font-mono">{r.extractedIban}</span></>
                 )}
               </div>
-              {r.attachments.length > 0 && (
-                <div className="text-xs text-slate-600 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                  {r.attachments.map((a) => (
-                    <a
-                      key={a.id}
-                      href={`/api/attachments/${a.id}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="inline-flex items-center gap-1 hover:underline text-blue-800"
-                    >
-                      <Paperclip className="size-3" />
-                      {a.fileName}
-                    </a>
-                  ))}
-                </div>
-              )}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewFor(r)}
+                  className="text-xs text-blue-800 hover:underline inline-flex items-center gap-1"
+                >
+                  <Eye className="size-3.5" /> Mail ansehen
+                </button>
+                {r.attachments.map((a) => (
+                  <a
+                    key={a.id}
+                    href={`/api/attachments/${a.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-xs inline-flex items-center gap-1 hover:underline text-blue-800"
+                  >
+                    <Paperclip className="size-3" />
+                    {a.fileName}
+                  </a>
+                ))}
+              </div>
             </div>
             <button
               type="button"
@@ -154,7 +190,7 @@ export function InboxTable({ rows }: { rows: Row[] }) {
                     </div>
                     <button
                       type="button"
-                      onClick={() => assign(r.id, c.transactionId)}
+                      onClick={() => assign(r.id, c.transactionId, c.label)}
                       disabled={busyId === r.id}
                       className="btn-primary text-xs"
                     >
@@ -188,7 +224,7 @@ export function InboxTable({ rows }: { rows: Row[] }) {
               </button>
               {searchOpenFor === r.id && (
                 <ManualSearch
-                  onPick={(txId) => assign(r.id, txId)}
+                  onPick={(txId, label) => assign(r.id, txId, label)}
                   initialAmount={r.extractedAmount}
                 />
               )}
@@ -196,6 +232,66 @@ export function InboxTable({ rows }: { rows: Row[] }) {
           </div>
         </div>
       ))}
+
+      {previewFor && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setPreviewFor(null)}
+        >
+          <div
+            className="bg-white rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Original-Mail</h3>
+            <div className="text-sm space-y-1 mb-3 border-b pb-3">
+              <div>
+                <strong>Von:</strong> {previewFor.from}
+              </div>
+              <div>
+                <strong>Empfangen:</strong>{" "}
+                {new Date(previewFor.receivedAt).toLocaleString("de-AT")}
+              </div>
+              <div>
+                <strong>Betreff:</strong> {previewFor.subject}
+              </div>
+            </div>
+            <iframe
+              src={`/api/mail-inbox/${previewFor.id}/body`}
+              className="w-full h-[400px] border rounded"
+              sandbox=""
+              title="Mail-Body"
+            />
+            {previewFor.attachments.length > 0 && (
+              <div className="mt-3 text-sm">
+                <div className="font-semibold text-slate-700 mb-1">Anhänge:</div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {previewFor.attachments.map((a) => (
+                    <a
+                      key={a.id}
+                      href={`/api/attachments/${a.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1 hover:underline text-blue-800"
+                    >
+                      <Paperclip className="size-3.5" />
+                      {a.fileName}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                type="button"
+                onClick={() => setPreviewFor(null)}
+                className="btn-primary"
+              >
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -204,7 +300,7 @@ function ManualSearch({
   onPick,
   initialAmount,
 }: {
-  onPick: (transactionId: string) => void;
+  onPick: (transactionId: string, label: string) => void;
   initialAmount: number | null;
 }) {
   const [q, setQ] = useState(
@@ -268,7 +364,12 @@ function ManualSearch({
               </span>
               <button
                 type="button"
-                onClick={() => onPick(r.id)}
+                onClick={() =>
+                  onPick(
+                    r.id,
+                    `${new Date(r.date).toLocaleDateString("de-AT")} · ${r.amount.toFixed(2)} € · ${r.counterparty ?? r.purpose ?? "—"}`,
+                  )
+                }
                 className="btn-primary text-xs"
               >
                 Zuordnen
