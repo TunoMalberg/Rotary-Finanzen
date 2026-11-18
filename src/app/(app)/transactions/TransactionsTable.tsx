@@ -1,6 +1,6 @@
 "use client";
 import { formatDate, formatEUR } from "@/lib/format";
-import { ChevronDown, ChevronRight, Paperclip, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip, Mail, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
@@ -32,8 +32,10 @@ export type TxRow = {
   memberName: string | null;
   attachmentName: string | null;
   attachmentId: string | null;
-  /** Gesamtzahl der Belege (Alt-Anhang + per Mail/Upload verknüpfte). */
+  /** Gesamtzahl der Datei-Belege (Alt-Anhang + per Mail/Upload verknüpfte). */
   attachmentCount: number;
+  /** Anzahl zugeordneter E-Mails (auch ohne Datei-Anhang). */
+  mailCount: number;
   /** Laufender Saldo NACH dieser Buchung (Konto + Clubjahr). */
   balanceAfter: number | null;
   /** Aufteilungen aus SEPA-Sammeleinzug (leer wenn keine vorhanden). */
@@ -215,20 +217,28 @@ export function TransactionsTable({
                     )}
                   </td>
                   <td data-label="Beleg">
-                    {t.attachmentCount === 0 ? (
-                      <span className="text-slate-300 text-sm">—</span>
-                    ) : t.attachmentId && t.attachmentCount === 1 ? (
-                      <a className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1 break-all"
-                         href={`/api/attachments/${t.attachmentId}`} target="_blank" rel="noreferrer"
-                         title={t.attachmentName ?? "Anhang"}>
-                        <Paperclip className="size-3.5 shrink-0" /> {t.attachmentName?.slice(0, 18) ?? "Anhang"}
-                      </a>
-                    ) : (
+                    {t.attachmentCount > 0 ? (
+                      t.attachmentId && t.attachmentCount === 1 ? (
+                        <a className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1 break-all"
+                           href={`/api/attachments/${t.attachmentId}`} target="_blank" rel="noreferrer"
+                           title={t.attachmentName ?? "Anhang"}>
+                          <Paperclip className="size-3.5 shrink-0" /> {t.attachmentName?.slice(0, 18) ?? "Anhang"}
+                        </a>
+                      ) : (
+                        <Link href={`/transactions/${t.id}`}
+                           className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1"
+                           title={`${t.attachmentCount} Beleg(e) bei dieser Buchung ansehen`}>
+                          <Paperclip className="size-3.5 shrink-0" /> {t.attachmentCount} Beleg{t.attachmentCount > 1 ? "e" : ""}
+                        </Link>
+                      )
+                    ) : t.mailCount > 0 ? (
                       <Link href={`/transactions/${t.id}`}
                          className="text-blue-700 hover:underline text-sm inline-flex items-center gap-1"
-                         title={`${t.attachmentCount} Beleg(e) bei dieser Buchung ansehen`}>
-                        <Paperclip className="size-3.5 shrink-0" /> {t.attachmentCount} Beleg{t.attachmentCount > 1 ? "e" : ""}
+                         title="Zugeordnete E-Mail(s) bei dieser Buchung ansehen">
+                        <Mail className="size-3.5 shrink-0" /> E-Mail
                       </Link>
+                    ) : (
+                      <span className="text-slate-300 text-sm">—</span>
                     )}
                   </td>
                   <td data-label="Betrag" className={`text-right font-mono tabular ${t.amount >= 0 ? "amount-pos" : "amount-neg"}`}>

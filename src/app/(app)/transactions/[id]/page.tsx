@@ -24,6 +24,17 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
         },
         orderBy: { createdAt: "asc" },
       },
+      matchedMails: {
+        select: {
+          id: true,
+          fromAddress: true,
+          fromName: true,
+          subject: true,
+          receivedAt: true,
+          _count: { select: { attachments: true } },
+        },
+        orderBy: { receivedAt: "desc" },
+      },
       allocations: {
         include: {
           member: { select: { id: true, lastName: true, firstName: true } },
@@ -75,6 +86,17 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
     });
   }
 
+  // Zugeordnete E-Mails (auch solche ohne Datei-Anhang), damit eine Zuordnung
+  // immer sichtbar ist.
+  const assignedMails = tx.matchedMails.map((m) => ({
+    id: m.id,
+    fromAddress: m.fromAddress,
+    fromName: m.fromName,
+    subject: m.subject,
+    receivedAt: m.receivedAt.toISOString(),
+    attachmentCount: m._count.attachments,
+  }));
+
   return (
     <div className="max-w-3xl fade-up space-y-8">
       <div>
@@ -107,6 +129,7 @@ export default async function EditTxPage({ params }: { params: Promise<{ id: str
       <AttachmentsPanel
         transactionId={tx.id}
         initial={attachmentItems}
+        assignedMails={assignedMails}
         canEdit={canEdit}
       />
 

@@ -11,6 +11,7 @@ import {
   Trash2,
   Download,
   ExternalLink,
+  Eye,
 } from "lucide-react";
 
 export type AttachmentItem = {
@@ -43,13 +44,24 @@ function iconFor(mime: string) {
   return Paperclip;
 }
 
+export type AssignedMail = {
+  id: string;
+  fromAddress: string;
+  fromName: string | null;
+  subject: string | null;
+  receivedAt: string;
+  attachmentCount: number;
+};
+
 export function AttachmentsPanel({
   transactionId,
   initial,
+  assignedMails = [],
   canEdit,
 }: {
   transactionId: string;
   initial: AttachmentItem[];
+  assignedMails?: AssignedMail[];
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -170,11 +182,11 @@ export function AttachmentsPanel({
         </div>
       )}
 
-      {items.length === 0 ? (
+      {items.length === 0 && assignedMails.length === 0 ? (
         <div className="px-4 sm:px-5 py-6 text-sm text-slate-500 text-center">
           Noch keine Belege hinterlegt.
         </div>
-      ) : (
+      ) : items.length === 0 ? null : (
         <ul className="divide-y">
           {items.map((a) => {
             const Icon = iconFor(a.mimeType);
@@ -247,6 +259,47 @@ export function AttachmentsPanel({
             );
           })}
         </ul>
+      )}
+
+      {assignedMails.length > 0 && (
+        <div className="border-t px-4 sm:px-5 py-3">
+          <div className="text-xs font-semibold text-slate-600 mb-2">
+            Zugeordnete E-Mails
+          </div>
+          <ul className="space-y-1.5">
+            {assignedMails.map((m) => (
+              <li key={m.id} className="flex items-center gap-2 text-sm">
+                <Mail className="size-4 text-slate-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{m.subject ?? "(kein Betreff)"}</div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {m.fromName ?? m.fromAddress}
+                    {" · "}
+                    {new Date(m.receivedAt).toLocaleDateString("de-AT")}
+                    {m.attachmentCount > 0
+                      ? ` · ${m.attachmentCount} Anhang${m.attachmentCount > 1 ? "/Anhänge" : ""}`
+                      : " · kein Anhang"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMail({
+                      id: m.id,
+                      fromAddress: m.fromAddress,
+                      fromName: m.fromName,
+                      subject: m.subject,
+                      receivedAt: m.receivedAt,
+                    })
+                  }
+                  className="btn-ghost text-xs inline-flex items-center gap-1"
+                >
+                  <Eye className="size-3.5" /> Mail ansehen
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {previewMail && (

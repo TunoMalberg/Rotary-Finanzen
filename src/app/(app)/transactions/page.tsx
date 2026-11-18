@@ -10,7 +10,7 @@ import { getServerSession } from "next-auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ account?: string; q?: string; year?: string; cat?: string }> }) {
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ account?: string; q?: string; year?: string; cat?: string; beleg?: string }> }) {
   const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const isTreasurer = session?.user?.role === "treasurer" || session?.user?.role === "admin";
   const cy = params.year
@@ -51,6 +51,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     accountId?: string;
     categoryId?: string;
     OR?: Array<Record<string, unknown>>;
+    AND?: Array<Record<string, unknown>>;
   };
   const where: WhereT = {
     clubYearId: cy.id,
@@ -58,6 +59,25 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   };
   if (accountFilter) where.accountId = accountFilter.id;
   if (params.cat && params.cat !== "all") where.categoryId = params.cat;
+  // Beleg-Filter: "none" = ohne jeden Beleg (keine Datei, keine zugeordnete
+  // Mail), "present" = mit mindestens einem Beleg.
+  if (params.beleg === "none") {
+    where.AND = [
+      { attachmentId: null },
+      { attachmentLinks: { none: {} } },
+      { matchedMails: { none: {} } },
+    ];
+  } else if (params.beleg === "present") {
+    where.AND = [
+      {
+        OR: [
+          { attachmentId: { not: null } },
+          { attachmentLinks: { some: {} } },
+          { matchedMails: { some: {} } },
+        ],
+      },
+    ];
+  }
   if (q) {
     where.OR = [
       { counterparty: ic(q) },
@@ -86,7 +106,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         account: true,
         member: true,
         attachment: true,
-        _count: { select: { attachmentLinks: true } },
+        _count: { select: { attachmentLinks: true, matchedMails: true } },
         allocations: {
           include: {
             member: { select: { firstName: true, lastName: true } },
@@ -179,6 +199,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Beleg</label>
+          <select name="beleg" defaultValue={params.beleg ?? "all"} className="input">
+            <option value="all">Alle</option>
+            <option value="none">Nur ohne Beleg</option>
+            <option value="present">Nur mit Beleg</option>
+          </select>
+        </div>
         <div className="sm:col-span-2">
           <label className="text-xs font-semibold text-slate-600 mb-1 block">Suche</label>
           <input type="text" name="q" defaultValue={params.q ?? ""} className="input" placeholder="Gegenpartei, Verwendungszweck, Mitglied …" />
@@ -216,6 +244,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           attachmentName: t.attachment?.fileName ?? null,
           attachmentId: t.attachment?.id ?? null,
           attachmentCount: t._count.attachmentLinks + (t.attachment ? 1 : 0),
+          mailCount: t._count.matchedMails,
           balanceAfter: balanceMap.get(t.id) ?? null,
           allocations: t.allocations.map((a) => ({
             id: a.id,
