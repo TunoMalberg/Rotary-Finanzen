@@ -19,6 +19,7 @@ export async function POST(req: Request) {
       city: body.city || null,
       postalCode: body.postalCode || null,
       country: body.country || "Austria",
+      iban: body.iban ? String(body.iban).replace(/\s+/g, "").toUpperCase() : null,
       paysBySEPA: !!body.paysBySEPA,
       isExempt: !!body.isExempt,
       duesAmount: body.duesAmount ?? 580,

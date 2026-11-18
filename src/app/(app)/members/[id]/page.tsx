@@ -37,7 +37,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               id: m.id,
               lastName: m.lastName, firstName: m.firstName,
               email: m.email, phone: m.phone, address: m.address, city: m.city,
-              postalCode: m.postalCode, country: m.country,
+              postalCode: m.postalCode, country: m.country, iban: m.iban,
               paysBySEPA: m.paysBySEPA, isExempt: m.isExempt, duesAmount: m.duesAmount,
               status: m.status, notes: m.notes,
             }} />
@@ -47,6 +47,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               <Row k="Telefon" v={m.phone ?? "—"} />
               <Row k="Adresse" v={`${m.address ?? "—"}, ${m.postalCode ?? ""} ${m.city ?? ""}`} />
               <Row k="EZ" v={m.paysBySEPA ? "Ja" : "Nein"} />
+              <Row k="IBAN" v={m.iban ?? "—"} />
               <Row k="Befreit" v={m.isExempt ? "Ja" : "Nein"} />
               <Row k="Beitrag" v={formatEUR(m.duesAmount)} />
               <Row k="Status" v={m.status} />

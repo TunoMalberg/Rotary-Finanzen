@@ -7,7 +7,7 @@ export function MemberEditForm({ member }: { member: {
   id: string;
   lastName: string; firstName: string;
   email: string | null; phone: string | null; address: string | null; city: string | null;
-  postalCode: string | null; country: string | null;
+  postalCode: string | null; country: string | null; iban: string | null;
   paysBySEPA: boolean; isExempt: boolean; duesAmount: number; status: string; notes: string | null;
 } }) {
   const router = useRouter();
@@ -34,6 +34,12 @@ export function MemberEditForm({ member }: { member: {
         <Field label="Adresse" className="sm:col-span-2"><input className="input" autoComplete="street-address" value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
         <Field label="PLZ"><input className="input" autoComplete="postal-code" inputMode="numeric" value={form.postalCode ?? ""} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} /></Field>
         <Field label="Stadt"><input className="input" autoComplete="address-level2" value={form.city ?? ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></Field>
+        <Field label="IBAN (für SEPA-Einzug)" className="sm:col-span-2">
+          <input className="input font-mono uppercase" autoComplete="off" spellCheck={false} placeholder="AT.. (leer = kein Einzug möglich)" value={form.iban ?? ""} onChange={(e) => setForm({ ...form, iban: e.target.value })} />
+          {form.paysBySEPA && !(form.iban ?? "").trim() && (
+            <p className="text-[11px] text-red-600 mt-1">Einzugsermächtigung aktiv, aber keine IBAN hinterlegt — der Einzug kann für dieses Mitglied nicht erzeugt werden.</p>
+          )}
+        </Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Field label="Beitrag (EUR)"><input className="input font-mono" type="number" inputMode="decimal" value={form.duesAmount} onChange={(e) => setForm({ ...form, duesAmount: Number(e.target.value) })} /></Field>

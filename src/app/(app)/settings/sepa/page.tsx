@@ -3,7 +3,8 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { getCurrentClubYear } from "@/lib/dataAccess";
 import { redirect } from "next/navigation";
-import { Landmark } from "lucide-react";
+import Link from "next/link";
+import { Landmark, AlertTriangle } from "lucide-react";
 import { SepaSettingsPanel } from "./SepaSettingsPanel";
 import { SepaExportControls } from "@/components/SepaExportControls";
 
@@ -24,7 +25,8 @@ export default async function SepaSettingsPage() {
     }),
     prisma.member.findMany({
       where: { status: "ACTIVE", paysBySEPA: true },
-      select: { id: true, iban: true },
+      select: { id: true, iban: true, lastName: true, firstName: true, rotaryMemberId: true },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
     prisma.clubYear.findMany({ orderBy: { startsAt: "desc" } }),
     getCurrentClubYear(),
@@ -42,8 +44,9 @@ export default async function SepaSettingsPage() {
   const auftraggeberIbanSuggested = initial.auftraggeberIban ? "" : (main?.iban ?? "");
 
   const sepaTotal = sepaMembers.length;
-  const withIban = sepaMembers.filter((m) => (m.iban ?? "").replace(/\s+/g, "").length > 0).length;
-  const withoutIban = sepaTotal - withIban;
+  const missingMembers = sepaMembers.filter((m) => (m.iban ?? "").replace(/\s+/g, "").length === 0);
+  const withIban = sepaTotal - missingMembers.length;
+  const withoutIban = missingMembers.length;
 
   const stats = [
     { label: "SEPA-Zahler", value: sepaTotal },
@@ -71,6 +74,31 @@ export default async function SepaSettingsPage() {
           </div>
         ))}
       </div>
+
+      {withoutIban > 0 && (
+        <section className="rounded-xl border border-red-200 bg-red-50 p-4 sm:p-5 space-y-2">
+          <h2 className="font-semibold text-red-800 flex items-center gap-2">
+            <AlertTriangle className="size-5" /> {withoutIban} SEPA-Zahler ohne IBAN
+          </h2>
+          <p className="text-sm text-red-700">
+            Diese Mitglieder haben eine Einzugsermächtigung, aber keine hinterlegte IBAN —
+            sie werden beim Export <strong>nicht</strong> eingezogen. Bitte IBAN beim Mitglied ergänzen.
+          </p>
+          <ul className="flex flex-wrap gap-2 pt-1">
+            {missingMembers.map((m) => (
+              <li key={m.id}>
+                <Link href={`/members/${m.id}`} className="inline-flex items-center gap-1 rounded-lg bg-white border border-red-200 px-2.5 py-1 text-sm text-red-800 hover:border-red-400">
+                  {m.lastName}, {m.firstName}
+                  {m.rotaryMemberId ? <span className="text-xs text-red-400 font-mono">#{m.rotaryMemberId}</span> : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link href="/members?missing=iban" className="inline-block text-sm font-medium text-red-800 underline pt-1">
+            In der Mitgliederliste anzeigen →
+          </Link>
+        </section>
+      )}
 
       <SepaSettingsPanel
         initial={initial}

@@ -8,7 +8,7 @@ import { MemberRowActions } from "./MemberRowActions";
 
 export const dynamic = "force-dynamic";
 
-export default async function MembersPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; method?: string }> }) {
+export default async function MembersPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; method?: string; missing?: string }> }) {
   const [params, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
   const canEdit = isTreasurer(session?.user?.role);
 
@@ -31,8 +31,12 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
     where,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
-  const realMembers = members.filter((m) => m.status !== "NON_MEMBER");
-  const guests = members.filter((m) => m.status === "NON_MEMBER").length;
+  // Zusatzfilter „EZ ohne IBAN": Einzugsermächtigung aktiv, aber keine IBAN hinterlegt.
+  const shown = params.missing === "iban"
+    ? members.filter((m) => m.paysBySEPA && !(m.iban ?? "").replace(/\s+/g, ""))
+    : members;
+  const realMembers = shown.filter((m) => m.status !== "NON_MEMBER");
+  const guests = shown.filter((m) => m.status === "NON_MEMBER").length;
   const total = realMembers.length;
   const sepa = realMembers.filter((m) => m.paysBySEPA).length;
   const exempt = realMembers.filter((m) => m.isExempt).length;
@@ -85,6 +89,13 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
             <option value="invoice">E-Mail-Rechnung</option>
           </select>
         </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">IBAN</label>
+          <select className="input" name="missing" defaultValue={params.missing ?? ""}>
+            <option value="">Alle</option>
+            <option value="iban">EZ ohne IBAN</option>
+          </select>
+        </div>
         <div className="sm:col-span-2 lg:col-span-4 flex gap-2 flex-wrap btn-row">
           <button className="btn-primary">Filter</button>
           <Link href="/members" className="btn-ghost">Reset</Link>
@@ -102,6 +113,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                   <th>Stadt</th>
                   <th>E-Mail</th>
                   <th>Telefon</th>
+                  <th>IBAN</th>
                   <th>Methode</th>
                   <th>Status</th>
                   <th className="text-right">Beitrag</th>
@@ -109,7 +121,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                 </tr>
               </thead>
               <tbody>
-                {members.map((m) => (
+                {shown.map((m) => (
                   <tr key={m.id}>
                     <td data-label="Name">
                       <Link href={`/members/${m.id}`} className="font-medium text-slate-900 hover:text-blue-700 break-words">
@@ -123,6 +135,13 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                     </td>
                     <td data-label="Telefon" className="text-slate-600 text-sm">
                       {m.phone ? <a href={`tel:${m.phone.replace(/\s+/g, "")}`} className="hover:text-blue-700">{m.phone}</a> : "—"}
+                    </td>
+                    <td data-label="IBAN" className="text-xs font-mono">
+                      {(m.iban ?? "").trim()
+                        ? <span className="text-slate-700 break-all">{m.iban}</span>
+                        : m.paysBySEPA
+                          ? <span className="chip chip-cancelled">fehlt</span>
+                          : <span className="text-slate-400">—</span>}
                     </td>
                     <td data-label="Methode">
                       {m.paysBySEPA
@@ -150,8 +169,8 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                     )}
                   </tr>
                 ))}
-                {members.length === 0 && (
-                  <tr><td colSpan={canEdit ? 9 : 8} className="text-center text-slate-500 py-12 no-stack-label">Keine Mitglieder gefunden.</td></tr>
+                {shown.length === 0 && (
+                  <tr><td colSpan={canEdit ? 10 : 9} className="text-center text-slate-500 py-12 no-stack-label">Keine Mitglieder gefunden.</td></tr>
                 )}
               </tbody>
             </table>

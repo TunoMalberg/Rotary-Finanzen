@@ -9,7 +9,7 @@ export default function NewMemberPage() {
     rotaryMemberId: "",
     lastName: "", firstName: "",
     email: "", phone: "",
-    address: "", postalCode: "", city: "", country: "Austria",
+    address: "", postalCode: "", city: "", country: "Austria", iban: "",
     paysBySEPA: false, isExempt: false, duesAmount: 580, status: "ACTIVE",
   });
   const [saving, setSaving] = useState(false);
@@ -38,6 +38,7 @@ export default function NewMemberPage() {
           <Field label="Adresse" className="sm:col-span-2"><input className="input" autoComplete="street-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
           <Field label="PLZ"><input className="input" autoComplete="postal-code" inputMode="numeric" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} /></Field>
           <Field label="Stadt"><input className="input" autoComplete="address-level2" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></Field>
+          <Field label="IBAN (für SEPA-Einzug)" className="sm:col-span-2"><input className="input font-mono uppercase" autoComplete="off" spellCheck={false} placeholder="AT.." value={form.iban} onChange={(e) => setForm({ ...form, iban: e.target.value })} /></Field>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2">
           <label className="text-sm flex items-center gap-2 min-h-[40px]"><input type="checkbox" className="size-5" checked={form.paysBySEPA} onChange={(e) => setForm({ ...form, paysBySEPA: e.target.checked })} /> Einzugsermächtigung</label>

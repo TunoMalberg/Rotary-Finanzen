@@ -18,6 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     city: body.city || null,
     postalCode: body.postalCode || null,
     country: body.country || "Austria",
+    iban: body.iban ? String(body.iban).replace(/\s+/g, "").toUpperCase() : null,
     paysBySEPA: !!body.paysBySEPA,
     isExempt: !!body.isExempt,
     duesAmount: Number(body.duesAmount) || 0,
