@@ -90,14 +90,44 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     }
   }
 
+  function openOutlookDraft() {
+    // Fertige Mahnung im Standard-Mailprogramm (Outlook) öffnen. Das MUSS
+    // synchron in der Klick-Aktion passieren – nach einem await (Server-Abfrage)
+    // blockiert der Browser das Öffnen als vermeintliches Popup.
+    const a = document.createElement("a");
+    a.href = buildMailto();
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   async function remind() {
+    if (!invoice.memberEmail) {
+      alert("Für dieses Mitglied ist keine E-Mail-Adresse hinterlegt. Bitte zuerst beim Mitglied ergänzen.");
+      return;
+    }
+    // 1) Outlook sofort mit der fertigen Mahnung öffnen (innerhalb der Klick-Aktion).
+    openOutlookDraft();
+    // 2) Erst nach dem tatsächlichen Versand als „gemahnt" markieren.
+    const sent = window.confirm(
+      `Die Mahnung wurde in Outlook geöffnet.\n\n` +
+        `Bitte dort auf „Senden" klicken.\n\n` +
+        `Danach hier mit „OK" bestätigen – dann wird die Forderung als „gemahnt" markiert.\n` +
+        `Falls Outlook nicht aufgegangen ist oder Sie noch nicht gesendet haben: „Abbrechen".`,
+    );
+    if (!sent) return;
     setBusy(true);
-    // log reminder, then open mail client
-    const res = await fetch(`/api/invoices/${invoice.id}/remind`, { method: "POST" });
-    setBusy(false);
-    if (res.ok) {
-      window.open(buildMailto(), "_blank");
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/remind`, { method: "POST" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d?.error ?? `Fehler ${res.status}`);
+        return;
+      }
       router.refresh();
+    } finally {
+      setBusy(false);
     }
   }
 
