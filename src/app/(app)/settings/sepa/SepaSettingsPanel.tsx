@@ -14,6 +14,10 @@ import {
 type Settings = {
   creditorId: string;
   creditorName: string;
+  creditorStreet: string;
+  creditorPostalCode: string;
+  creditorTown: string;
+  creditorCountry: string;
   auftraggeberIban: string;
   /** Im Speicher als TT.MM.JJJJ; im Formular als YYYY-MM-DD gehalten. */
   mandateDate: string;
@@ -61,6 +65,10 @@ export function SepaSettingsPanel({
   const [form, setForm] = useState({
     creditorId: initial.creditorId,
     creditorName: initial.creditorName,
+    creditorStreet: initial.creditorStreet,
+    creditorPostalCode: initial.creditorPostalCode,
+    creditorTown: initial.creditorTown,
+    creditorCountry: initial.creditorCountry || "Österreich",
     auftraggeberIban: initial.auftraggeberIban || auftraggeberIbanSuggested,
     mandateDateIso: deToIso(initial.mandateDate),
     verwendungszweck: initial.verwendungszweck,
@@ -88,6 +96,10 @@ export function SepaSettingsPanel({
         body: JSON.stringify({
           creditorId: form.creditorId.trim(),
           creditorName: form.creditorName.trim(),
+          creditorStreet: form.creditorStreet.trim(),
+          creditorPostalCode: form.creditorPostalCode.trim(),
+          creditorTown: form.creditorTown.trim(),
+          creditorCountry: form.creditorCountry.trim(),
           auftraggeberIban: form.auftraggeberIban.replace(/\s+/g, "").toUpperCase(),
           mandateDate: isoToDe(form.mandateDateIso),
           verwendungszweck: form.verwendungszweck.trim(),
@@ -232,6 +244,54 @@ export function SepaSettingsPanel({
               Wird nur verwendet, wenn eine Forderung keinen eigenen
               Verwendungszweck hat.
             </p>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <h3 className="text-sm font-semibold text-slate-700 mb-1">
+            Gläubiger-Adresse (für XML / ISO-2019)
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">
+            George verlangt für die XML-Datei strukturierte Adressen. Einmalig
+            die Vereinsadresse eintragen.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold mb-1 block">Straße + Nr.</label>
+              <input
+                className="input"
+                placeholder="Hauptstraße 1"
+                value={form.creditorStreet}
+                onChange={(e) => setForm({ ...form, creditorStreet: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold mb-1 block">PLZ</label>
+              <input
+                className="input"
+                placeholder="1220"
+                value={form.creditorPostalCode}
+                onChange={(e) => setForm({ ...form, creditorPostalCode: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold mb-1 block">Ort</label>
+              <input
+                className="input"
+                placeholder="Wien"
+                value={form.creditorTown}
+                onChange={(e) => setForm({ ...form, creditorTown: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold mb-1 block">Land</label>
+              <input
+                className="input"
+                placeholder="Österreich"
+                value={form.creditorCountry}
+                onChange={(e) => setForm({ ...form, creditorCountry: e.target.value })}
+              />
+            </div>
           </div>
         </div>
 

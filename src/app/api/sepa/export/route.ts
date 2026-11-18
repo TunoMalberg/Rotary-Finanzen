@@ -99,6 +99,10 @@ export async function GET(req: Request) {
     mandateDate: raw.mandateDate.trim(),
     verwendungszweck: raw.verwendungszweck?.trim() || undefined,
     creditorName: raw.creditorName?.trim() || undefined,
+    creditorStreet: raw.creditorStreet?.trim() || undefined,
+    creditorPostalCode: raw.creditorPostalCode?.trim() || undefined,
+    creditorTown: raw.creditorTown?.trim() || undefined,
+    creditorCountry: raw.creditorCountry?.trim() || undefined,
   };
 
   // Offene SEPA-Beiträge laden.
@@ -141,6 +145,10 @@ export async function GET(req: Request) {
       rotaryMemberId: m.rotaryMemberId,
       memberId: m.id,
       description: inv.description ?? `Mitgliedsbeitrag ${label}`,
+      street: m.address,
+      postalCode: m.postalCode,
+      city: m.city,
+      country: m.country,
     });
     totalAmount += inv.amount;
   }

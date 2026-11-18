@@ -10,6 +10,10 @@ export const dynamic = "force-dynamic";
 const ALLOWED_KEYS = [
   "creditorId",
   "creditorName",
+  "creditorStreet",
+  "creditorPostalCode",
+  "creditorTown",
+  "creditorCountry",
   "auftraggeberIban",
   "mandateDate",
   "verwendungszweck",
@@ -55,6 +59,10 @@ export async function GET() {
     settings: {
       creditorId: settings.creditorId ?? "",
       creditorName: settings.creditorName ?? "",
+      creditorStreet: settings.creditorStreet ?? "",
+      creditorPostalCode: settings.creditorPostalCode ?? "",
+      creditorTown: settings.creditorTown ?? "",
+      creditorCountry: settings.creditorCountry ?? "",
       auftraggeberIban: settings.auftraggeberIban ?? "",
       mandateDate: settings.mandateDate ?? "",
       verwendungszweck: settings.verwendungszweck ?? "",

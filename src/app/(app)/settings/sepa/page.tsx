@@ -38,6 +38,10 @@ export default async function SepaSettingsPage() {
   const initial = {
     creditorId: raw.creditorId ?? "",
     creditorName: raw.creditorName ?? "",
+    creditorStreet: raw.creditorStreet ?? "",
+    creditorPostalCode: raw.creditorPostalCode ?? "",
+    creditorTown: raw.creditorTown ?? "",
+    creditorCountry: raw.creditorCountry ?? "",
     auftraggeberIban: raw.auftraggeberIban ?? "",
     mandateDate: raw.mandateDate ?? "",
     verwendungszweck: raw.verwendungszweck ?? "",

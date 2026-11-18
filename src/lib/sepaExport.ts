@@ -56,6 +56,11 @@ export type SepaExportRow = {
   memberId: string;
   /** Verwendungszweck (z. B. Rechnungsbeschreibung), optional. */
   description: string | null;
+  /** Adresse des Mitglieds (für strukturierte Adresse in der XML), optional. */
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  country?: string | null;
 };
 
 /** Clubweite SEPA-Einstellungen. */
@@ -68,6 +73,12 @@ export type SepaSettings = {
   verwendungszweck?: string;
   /** Gläubigername (Vereinsname) – nur für die XML-Variante (pain.008). */
   creditorName?: string;
+  /** Gläubiger-Adresse (strukturiert, für pain.008.001.08). */
+  creditorStreet?: string;
+  creditorPostalCode?: string;
+  creditorTown?: string;
+  /** Länderangabe (Name oder ISO-Code); wird zu ISO-2-Buchstaben normalisiert. */
+  creditorCountry?: string;
 };
 
 /** Optionen für den Export. */
@@ -247,6 +258,42 @@ function isoDay(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Normalisiert eine Länderangabe auf den ISO-2-Buchstaben-Code (Default AT). */
+function countryCode(s: string | null | undefined): string {
+  const v = (s ?? "").trim();
+  if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
+  const low = v.toLowerCase();
+  if (/öster|austri/.test(low)) return "AT";
+  if (/deutsch|german/.test(low)) return "DE";
+  if (/schweiz|switzer|suisse/.test(low)) return "CH";
+  if (/ital/.test(low)) return "IT";
+  if (/liechtenstein/.test(low)) return "LI";
+  return "AT";
+}
+
+/**
+ * Baut ein strukturiertes `<PstlAdr>` (ISO-2019). Reihenfolge der Kinder gemäß
+ * XSD: StrtNm, PstCd, TwnNm, Ctry. `Ctry` ist Pflicht und immer gesetzt.
+ * `force=false`: nur ausgeben, wenn Straße/PLZ/Ort vorhanden (Adresse ist für
+ * den Zahlungspflichtigen optional). `force=true`: immer (für den Gläubiger).
+ */
+function buildPstlAdr(
+  a: { street?: string | null; postalCode?: string | null; town?: string | null; country?: string | null },
+  force: boolean,
+): string {
+  const street = sanitizeWide(a.street, 70);
+  const pst = sanitizeWide(a.postalCode, 16);
+  const town = sanitizeWide(a.town, 35);
+  const ctry = countryCode(a.country);
+  if (!force && !street && !pst && !town) return "";
+  const parts: string[] = [];
+  if (street) parts.push(`<StrtNm>${xmlEscape(street)}</StrtNm>`);
+  if (pst) parts.push(`<PstCd>${xmlEscape(pst)}</PstCd>`);
+  if (town) parts.push(`<TwnNm>${xmlEscape(town)}</TwnNm>`);
+  parts.push(`<Ctry>${ctry}</Ctry>`);
+  return `<PstlAdr>${parts.join("")}</PstlAdr>`;
+}
+
 /** Parst "TT.MM.JJJJ" → Date (UTC-Mitternacht) oder null bei Fehlformat. */
 export function parseGermanDate(s: string | null | undefined): Date | null {
   const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((s ?? "").trim());
@@ -300,6 +347,15 @@ export function buildSepaPain008(
   const reqColl = isoDay(opts.collectionDate);
   const dtSign = isoDay(opts.mandateDate);
   const nm = xmlEscape(creditorName);
+  const cdtrAdr = buildPstlAdr(
+    {
+      street: settings.creditorStreet,
+      postalCode: settings.creditorPostalCode,
+      town: settings.creditorTown,
+      country: settings.creditorCountry,
+    },
+    true,
+  );
 
   const txBlocks = rows
     .map((r) => {
@@ -315,7 +371,7 @@ export function buildSepaPain008(
         `        <InstdAmt Ccy="EUR">${r.amount.toFixed(2)}</InstdAmt>`,
         `        <DrctDbtTx><MndtRltdInf><MndtId>${xmlEscape(buildMandateRef(r))}</MndtId><DtOfSgntr>${dtSign}</DtOfSgntr></MndtRltdInf></DrctDbtTx>`,
         `        <DbtrAgt><FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId></DbtrAgt>`,
-        `        <Dbtr><Nm>${xmlEscape(sanitizeWide(`${r.firstName} ${r.lastName}`, 70))}</Nm></Dbtr>`,
+        `        <Dbtr><Nm>${xmlEscape(sanitizeWide(`${r.firstName} ${r.lastName}`, 70))}</Nm>${buildPstlAdr({ street: r.street, postalCode: r.postalCode, town: r.city, country: r.country }, false)}</Dbtr>`,
         `        <DbtrAcct><Id><IBAN>${normalizeIban(r.memberIban)}</IBAN></Id></DbtrAcct>`,
         `        <RmtInf><Ustrd>${xmlEscape(sanitizeWide(zweck, 140))}</Ustrd></RmtInf>`,
         `      </DrctDbtTxInf>`,
@@ -325,7 +381,7 @@ export function buildSepaPain008(
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`,
+    `<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.08" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`,
     `  <CstmrDrctDbtInitn>`,
     `    <GrpHdr>`,
     `      <MsgId>${msgId}</MsgId>`,
@@ -342,7 +398,7 @@ export function buildSepaPain008(
     `      <CtrlSum>${ctrlSum}</CtrlSum>`,
     `      <PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>${seqTp}</SeqTp></PmtTpInf>`,
     `      <ReqdColltnDt>${reqColl}</ReqdColltnDt>`,
-    `      <Cdtr><Nm>${nm}</Nm></Cdtr>`,
+    `      <Cdtr><Nm>${nm}</Nm>${cdtrAdr}</Cdtr>`,
     `      <CdtrAcct><Id><IBAN>${creditorIban}</IBAN></Id></CdtrAcct>`,
     `      <CdtrAgt><FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId></CdtrAgt>`,
     `      <ChrgBr>SLEV</ChrgBr>`,
