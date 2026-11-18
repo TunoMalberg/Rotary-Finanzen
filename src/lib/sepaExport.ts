@@ -66,6 +66,8 @@ export type SepaSettings = {
   mandateDate: string;
   /** Optionale Verwendungszweck-Vorlage. */
   verwendungszweck?: string;
+  /** Gläubigername (Vereinsname) – nur für die XML-Variante (pain.008). */
+  creditorName?: string;
 };
 
 /** Optionen für den Export. */
@@ -221,4 +223,134 @@ export function buildSepaCsv(
   }
 
   return lines.join("\r\n");
+}
+
+/* ======================================================================== */
+/*  SEPA-XML (pain.008.001.02) – „Datenträger" für den Standard-Upload       */
+/* ======================================================================== */
+
+/** XML-Sonderzeichen maskieren. */
+function xmlEscape(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/** Date → "YYYY-MM-DD" aus UTC-Feldern. */
+function isoDay(d: Date): string {
+  const y = String(d.getUTCFullYear()).padStart(4, "0");
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Parst "TT.MM.JJJJ" → Date (UTC-Mitternacht) oder null bei Fehlformat. */
+export function parseGermanDate(s: string | null | undefined): Date | null {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((s ?? "").trim());
+  if (!m) return null;
+  const day = Number(m[1]);
+  const mon = Number(m[2]);
+  const year = Number(m[3]);
+  const d = new Date(Date.UTC(year, mon - 1, day));
+  if (d.getUTCMonth() !== mon - 1 || d.getUTCDate() !== day) return null;
+  return d;
+}
+
+/** Erzeugt eine eindeutige, alphanumerische ID (≤ 35 Zeichen) für MsgId/PmtInfId. */
+function genMsgId(prefix: string): string {
+  const ts = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+  const rnd = Math.random().toString(36).slice(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `${prefix}${ts}${rnd}`.slice(0, 35);
+}
+
+/** Optionen für die pain.008-XML. */
+export type Pain008Options = {
+  /** Fälligkeits-/Einzugsdatum (ReqdColltnDt). */
+  collectionDate: Date;
+  /** Mandatsausstellungsdatum (DtOfSgntr), clubweit. */
+  mandateDate: Date;
+  /** Gläubigername (Cdtr/Nm + InitgPty). */
+  creditorName: string;
+  /** Sequenzart. Default: RCUR (Folgeeinzug). */
+  seqType?: "FRST" | "RCUR" | "OOFF" | "FNAL";
+};
+
+/**
+ * Baut eine SEPA-Lastschrift-XML (pain.008.001.02, CORE) für den Datei-/
+ * Datenträger-Upload. Ein Datensatz je Zeile. Beträge als Punkt-Dezimal,
+ * Daten als YYYY-MM-DD, BIC via "NOTPROVIDED" (IBAN-only). KEIN BOM.
+ */
+export function buildSepaPain008(
+  rows: SepaExportRow[],
+  settings: SepaSettings,
+  opts: Pain008Options,
+): string {
+  const seqTp = opts.seqType ?? "RCUR";
+  const creditorName = sanitizeWide(opts.creditorName, 70) || "Rotary Club";
+  const creditorIban = normalizeIban(settings.auftraggeberIban);
+  const creditorId = xmlEscape(settings.creditorId.replace(/\s+/g, ""));
+  const nbTx = rows.length;
+  const ctrlSum = rows.reduce((s, r) => s + r.amount, 0).toFixed(2);
+  const msgId = genMsgId("RCWD");
+  const pmtInfId = genMsgId("RCWDPMT");
+  const creDtTm = new Date().toISOString().slice(0, 19);
+  const reqColl = isoDay(opts.collectionDate);
+  const dtSign = isoDay(opts.mandateDate);
+  const nm = xmlEscape(creditorName);
+
+  const txBlocks = rows
+    .map((r) => {
+      const zweck =
+        (r.description && r.description.trim().length > 0
+          ? r.description
+          : settings.verwendungszweck && settings.verwendungszweck.trim().length > 0
+            ? settings.verwendungszweck
+            : "Mitgliedsbeitrag") ?? "Mitgliedsbeitrag";
+      return [
+        `      <DrctDbtTxInf>`,
+        `        <PmtId><EndToEndId>NOTPROVIDED</EndToEndId></PmtId>`,
+        `        <InstdAmt Ccy="EUR">${r.amount.toFixed(2)}</InstdAmt>`,
+        `        <DrctDbtTx><MndtRltdInf><MndtId>${xmlEscape(buildMandateRef(r))}</MndtId><DtOfSgntr>${dtSign}</DtOfSgntr></MndtRltdInf></DrctDbtTx>`,
+        `        <DbtrAgt><FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId></DbtrAgt>`,
+        `        <Dbtr><Nm>${xmlEscape(sanitizeWide(`${r.firstName} ${r.lastName}`, 70))}</Nm></Dbtr>`,
+        `        <DbtrAcct><Id><IBAN>${normalizeIban(r.memberIban)}</IBAN></Id></DbtrAcct>`,
+        `        <RmtInf><Ustrd>${xmlEscape(sanitizeWide(zweck, 140))}</Ustrd></RmtInf>`,
+        `      </DrctDbtTxInf>`,
+      ].join("\n");
+    })
+    .join("\n");
+
+  return [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`,
+    `  <CstmrDrctDbtInitn>`,
+    `    <GrpHdr>`,
+    `      <MsgId>${msgId}</MsgId>`,
+    `      <CreDtTm>${creDtTm}</CreDtTm>`,
+    `      <NbOfTxs>${nbTx}</NbOfTxs>`,
+    `      <CtrlSum>${ctrlSum}</CtrlSum>`,
+    `      <InitgPty><Nm>${nm}</Nm></InitgPty>`,
+    `    </GrpHdr>`,
+    `    <PmtInf>`,
+    `      <PmtInfId>${pmtInfId}</PmtInfId>`,
+    `      <PmtMtd>DD</PmtMtd>`,
+    `      <BtchBookg>true</BtchBookg>`,
+    `      <NbOfTxs>${nbTx}</NbOfTxs>`,
+    `      <CtrlSum>${ctrlSum}</CtrlSum>`,
+    `      <PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>${seqTp}</SeqTp></PmtTpInf>`,
+    `      <ReqdColltnDt>${reqColl}</ReqdColltnDt>`,
+    `      <Cdtr><Nm>${nm}</Nm></Cdtr>`,
+    `      <CdtrAcct><Id><IBAN>${creditorIban}</IBAN></Id></CdtrAcct>`,
+    `      <CdtrAgt><FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId></CdtrAgt>`,
+    `      <ChrgBr>SLEV</ChrgBr>`,
+    `      <CdtrSchmeId><Id><PrvtId><Othr><Id>${creditorId}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId>`,
+    txBlocks,
+    `    </PmtInf>`,
+    `  </CstmrDrctDbtInitn>`,
+    `</Document>`,
+    ``,
+  ].join("\n");
 }

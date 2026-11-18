@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 /** Erlaubte SEPA-Einstellungs-Keys (ohne `sepa.`-Präfix). */
 const ALLOWED_KEYS = [
   "creditorId",
+  "creditorName",
   "auftraggeberIban",
   "mandateDate",
   "verwendungszweck",
@@ -53,6 +54,7 @@ export async function GET() {
   return NextResponse.json({
     settings: {
       creditorId: settings.creditorId ?? "",
+      creditorName: settings.creditorName ?? "",
       auftraggeberIban: settings.auftraggeberIban ?? "",
       mandateDate: settings.mandateDate ?? "",
       verwendungszweck: settings.verwendungszweck ?? "",

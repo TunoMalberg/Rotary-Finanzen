@@ -13,6 +13,7 @@ import {
 
 type Settings = {
   creditorId: string;
+  creditorName: string;
   auftraggeberIban: string;
   /** Im Speicher als TT.MM.JJJJ; im Formular als YYYY-MM-DD gehalten. */
   mandateDate: string;
@@ -59,6 +60,7 @@ export function SepaSettingsPanel({
 
   const [form, setForm] = useState({
     creditorId: initial.creditorId,
+    creditorName: initial.creditorName,
     auftraggeberIban: initial.auftraggeberIban || auftraggeberIbanSuggested,
     mandateDateIso: deToIso(initial.mandateDate),
     verwendungszweck: initial.verwendungszweck,
@@ -85,6 +87,7 @@ export function SepaSettingsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           creditorId: form.creditorId.trim(),
+          creditorName: form.creditorName.trim(),
           auftraggeberIban: form.auftraggeberIban.replace(/\s+/g, "").toUpperCase(),
           mandateDate: isoToDe(form.mandateDateIso),
           verwendungszweck: form.verwendungszweck.trim(),
@@ -165,6 +168,20 @@ export function SepaSettingsPanel({
               onChange={(e) => setForm({ ...form, creditorId: e.target.value })}
               required
             />
+          </div>
+          <div>
+            <label className="text-xs font-semibold mb-1 block">
+              Gläubiger-Name (Vereinsname)
+            </label>
+            <input
+              className="input"
+              placeholder="Rotary Club Wien-Donau"
+              value={form.creditorName}
+              onChange={(e) => setForm({ ...form, creditorName: e.target.value })}
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Für die XML-Datei (Datenträger) nötig; erscheint als Auftraggeber.
+            </p>
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block">

@@ -38,16 +38,17 @@ export function SepaExportControls({
   const [open, setOpen] = useState(false);
   const [clubYearId, setClubYearId] = useState(initialClubYearId);
   const [faelligkeitsdatum, setFaelligkeitsdatum] = useState("");
-  const [busy, setBusy] = useState<null | "preview" | "download">(null);
+  const [busy, setBusy] = useState<null | "preview" | "download" | "downloadXml">(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const showSelect = (clubYears?.length ?? 0) > 1;
 
-  function buildQuery(includePreview: boolean) {
+  function buildQuery(includePreview: boolean, format?: "csv" | "xml") {
     const p = new URLSearchParams({ clubYearId });
     if (faelligkeitsdatum) p.set("faelligkeitsdatum", faelligkeitsdatum);
     if (includePreview) p.set("preview", "1");
+    if (format === "xml") p.set("format", "xml");
     return p.toString();
   }
 
@@ -71,11 +72,11 @@ export function SepaExportControls({
     }
   }
 
-  async function runDownload() {
-    setBusy("download");
+  async function runDownload(format: "csv" | "xml") {
+    setBusy(format === "xml" ? "downloadXml" : "download");
     setError(null);
     try {
-      const res = await fetch(`/api/sepa/export?${buildQuery(false)}`, {
+      const res = await fetch(`/api/sepa/export?${buildQuery(false, format)}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -92,7 +93,7 @@ export function SepaExportControls({
       const match = cd.match(/filename="?([^"]+)"?/);
       const filename =
         match?.[1] ??
-        `SEPA-Einzug_${new Date().toISOString().slice(0, 10)}.csv`;
+        `SEPA-Einzug_${new Date().toISOString().slice(0, 10)}.${format}`;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -179,7 +180,7 @@ export function SepaExportControls({
             <button
               type="button"
               className="btn-primary"
-              onClick={runDownload}
+              onClick={() => runDownload("csv")}
               disabled={busy !== null}
             >
               {busy === "download" ? (
@@ -189,7 +190,26 @@ export function SepaExportControls({
               )}{" "}
               CSV herunterladen
             </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => runDownload("xml")}
+              disabled={busy !== null}
+              title="SEPA-XML (pain.008) für den Datei-/Datenträger-Upload"
+            >
+              {busy === "downloadXml" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}{" "}
+              XML (pain.008)
+            </button>
           </div>
+          <p className="text-xs text-slate-400">
+            CSV: über die <strong>CSV-Import</strong>-Funktion in George hochladen.
+            XML (pain.008): über <strong>Datei-/Datenträger-Import</strong> — dafür
+            sind Fälligkeitsdatum und Gläubiger-Name nötig.
+          </p>
 
           {error && (
             <p className="flex items-start gap-2 text-sm text-red-600">

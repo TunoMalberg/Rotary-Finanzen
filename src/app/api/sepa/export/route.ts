@@ -4,7 +4,9 @@ import { authOptions, isTreasurer } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   buildSepaCsv,
+  buildSepaPain008,
   normalizeIban,
+  parseGermanDate,
   sanitizeWide,
   type SepaExportRow,
   type SepaSettings,
@@ -57,6 +59,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const clubYearId = url.searchParams.get("clubYearId");
   const preview = url.searchParams.get("preview") === "1";
+  const format = url.searchParams.get("format") === "xml" ? "xml" : "csv";
   const faelligkeitsdatum = normalizeFaelligkeit(
     url.searchParams.get("faelligkeitsdatum"),
   );
@@ -95,6 +98,7 @@ export async function GET(req: Request) {
     auftraggeberIban: raw.auftraggeberIban.trim(),
     mandateDate: raw.mandateDate.trim(),
     verwendungszweck: raw.verwendungszweck?.trim() || undefined,
+    creditorName: raw.creditorName?.trim() || undefined,
   };
 
   // Offene SEPA-Beiträge laden.
@@ -148,6 +152,48 @@ export async function GET(req: Request) {
       totalAmount,
       missingIban,
       settingsOk: true,
+    });
+  }
+
+  // XML-Variante (pain.008 „Datenträger") für den Standard-Datei-Upload.
+  if (format === "xml") {
+    const xmlDate = new Date().toISOString().slice(0, 10);
+    const xmlLabel = sanitizeWide(label, 35).replace(/[^\w.-]+/g, "-") || "Clubjahr";
+    if (rows.length === 0) {
+      return NextResponse.json(
+        { error: "Keine einzuziehenden Beiträge vorhanden (keine offenen SEPA-Forderungen oder alle ohne IBAN)." },
+        { status: 400 },
+      );
+    }
+    const collDate = parseGermanDate(faelligkeitsdatum);
+    const mandDate = parseGermanDate(settings.mandateDate);
+    const cname = settings.creditorName ?? "";
+    const xmlMissing: string[] = [];
+    if (!cname) xmlMissing.push("Gläubiger-Name");
+    if (!collDate) xmlMissing.push("Fälligkeitsdatum");
+    if (!mandDate) xmlMissing.push("Mandatsausstellungsdatum (TT.MM.JJJJ)");
+    if (xmlMissing.length > 0 || !collDate || !mandDate) {
+      return NextResponse.json(
+        {
+          error: `Für die XML-Datei (pain.008) fehlt: ${xmlMissing.join(", ")}. Das Fälligkeitsdatum ist für die XML Pflicht; den Gläubiger-Namen unter „SEPA-Einzug" hinterlegen.`,
+          missingSettings: xmlMissing,
+        },
+        { status: 400 },
+      );
+    }
+    const xml = buildSepaPain008(rows, settings, {
+      collectionDate: collDate,
+      mandateDate: mandDate,
+      creditorName: cname,
+      seqType: "RCUR",
+    });
+    return new NextResponse(xml, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Content-Disposition": `attachment; filename="SEPA-Einzug_${xmlLabel}_${xmlDate}.xml"`,
+        "Cache-Control": "no-store",
+      },
     });
   }
 
