@@ -6,6 +6,7 @@ import { formatEUR, formatDate } from "@/lib/format";
 
 const CLUB_IBAN = "AT41 2011 1310 0670 0296";
 const CLUB_NAME = "Rotary Club Wien-Donau";
+const TREASURER_NAME = "Tuno Malberg";
 
 export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; memberFirstName: string; memberIban: string | null; clubYearLabel: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string; invoiceSentAt: string | null } }) {
   const router = useRouter();
@@ -77,28 +78,28 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
         : `Nochmalige freundliche Erinnerung – Mitgliedsbeitrag (${invoice.reference})`;
     const body =
       `${anrede}\n\n` +
-      `ganz entspannt und unter Freunden: Dein Mitgliedsbeitrag für das Clubjahr ${invoice.clubYearLabel} (${formatEUR(invoice.amount)}) ist bei uns noch nicht eingegangen. In einem vollen Terminkalender geht so etwas leicht unter – daher diese kleine, freundliche Erinnerung.\n\n` +
-      `Du kannst den Betrag ganz bequem auf unser Clubkonto überweisen:\n` +
-      `  IBAN: ${CLUB_IBAN}\n  Verwendungszweck: ${invoice.reference}\n  Betrag: ${formatEUR(invoice.amount)}\n\n` +
+      `Dein Mitgliedsbeitrag für das Clubjahr ${invoice.clubYearLabel} ist bei uns noch nicht eingegangen – daher diese Erinnerung.\n\n` +
       `Falls Du bereits überwiesen hast, hat sich das hier einfach überschnitten – dann sag mir kurz Bescheid, und ich gleiche es ab.\n\n` +
-      `Herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${CLUB_NAME}`;
+      `Ansonsten bitte den Betrag auf unser Clubkonto überweisen:\n` +
+      `IBAN ${CLUB_IBAN} / Verwendungszweck ${invoice.reference} / Betrag ${formatEUR(invoice.amount)}\n\n` +
+      `Herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${TREASURER_NAME}\n${CLUB_NAME}`;
     return `mailto:${invoice.memberEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   // SEPA-Rücklauf: Einzug kam retour → IBAN prüfen + um einmalige Überweisung bitten.
   function buildReturnMailto() {
     const subject = `Mitgliedsbeitrag – Lastschrift kam retour (${invoice.reference})`;
-    const ibanZeile = invoice.memberIban
-      ? `  ${invoice.memberIban}`
-      : `  (bei uns ist derzeit keine IBAN hinterlegt)`;
+    const ibanInline = invoice.memberIban
+      ? invoice.memberIban
+      : "(bei uns ist derzeit keine IBAN hinterlegt)";
     const body =
       `${anrede}\n\n` +
-      `wie jedes Jahr ziehen wir den Mitgliedsbeitrag bequem per SEPA-Lastschrift ein. Bei Dir ist der Einzug für das Clubjahr ${invoice.clubYearLabel} (${formatEUR(invoice.amount)}) allerdings zu uns zurückgekommen.\n\n` +
-      `Wir haben folgende Bankverbindung hinterlegt:\n${ibanZeile}\n\n` +
-      `Darf ich Dich bitten, kurz zu prüfen, ob diese IBAN noch stimmt? Falls sich Deine Bankverbindung geändert hat, gib mir bitte die aktuelle IBAN bekannt – dann klappt der Einzug im nächsten Jahr wieder automatisch.\n\n` +
-      `Für den heurigen Beitrag bitte ich Dich um eine einmalige Überweisung auf unser Clubkonto:\n` +
-      `  IBAN: ${CLUB_IBAN}\n  Verwendungszweck: ${invoice.reference}\n  Betrag: ${formatEUR(invoice.amount)}\n\n` +
-      `Ganz herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${CLUB_NAME}`;
+      `wie jedes Jahr ziehen wir den Mitgliedsbeitrag für Dich bequem per SEPA-Lastschrift ein. Bei Dir ist der Einzug für das Clubjahr ${invoice.clubYearLabel} allerdings zu uns zurückgekommen.\n\n` +
+      `Wir haben folgende Bankverbindung hinterlegt: ${ibanInline}\n\n` +
+      `Darf ich Dich bitten, kurz zu prüfen, ob diese IBAN noch stimmt? Falls sie sich geändert hat, gib mir bitte die aktuelle bekannt – dann klappt der Einzug nächstes Jahr wieder automatisch.\n\n` +
+      `Für den heurigen Beitrag bitte ich Dich um eine einmalige Überweisung:\n` +
+      `IBAN ${CLUB_IBAN} / Verwendungszweck ${invoice.reference} / Betrag ${formatEUR(invoice.amount)}\n\n` +
+      `Ganz herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${TREASURER_NAME}\n${CLUB_NAME}`;
     return `mailto:${invoice.memberEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
