@@ -4,7 +4,10 @@ import { useState } from "react";
 import { Mail, Check, Loader2, RotateCcw, Pencil, Trash2, X, Send } from "lucide-react";
 import { formatEUR, formatDate } from "@/lib/format";
 
-export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string; invoiceSentAt: string | null } }) {
+const CLUB_IBAN = "AT41 2011 1310 0670 0296";
+const CLUB_NAME = "Rotary Club Wien-Donau";
+
+export function DuesRowActions({ invoice }: { invoice: { id: string; status: string; memberEmail: string | null; memberName: string; memberFirstName: string; memberIban: string | null; clubYearLabel: string; amount: number; reference: string; dueDate: string; reminderLevel: number; paymentMethod: string; invoiceSentAt: string | null } }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -63,16 +66,40 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     }
   }
 
+  const anrede = `Lieber Freund, liebe Freundin ${invoice.memberFirstName},`;
+
+  // Freundliche, kollegiale Zahlungserinnerung (rotarisches „Du").
   function buildMailto() {
     const lvl = invoice.reminderLevel + 1;
-    const subject = lvl === 1 ? `Erinnerung Mitgliedsbeitrag (${invoice.reference})` : `${lvl - 1}. Mahnung Mitgliedsbeitrag (${invoice.reference})`;
+    const subject =
+      lvl <= 1
+        ? `Freundliche Erinnerung – Mitgliedsbeitrag (${invoice.reference})`
+        : `Nochmalige freundliche Erinnerung – Mitgliedsbeitrag (${invoice.reference})`;
     const body =
-      `Lieber Freund/liebe Freundin ${invoice.memberName},\n\n` +
-      `auf unserem Konto ist Ihr Mitgliedsbeitrag in Höhe von ${formatEUR(invoice.amount)} (Referenz ${invoice.reference}, fällig ${formatDate(invoice.dueDate)}) noch nicht eingelangt.\n\n` +
-      `Wir bitten höflich um Begleichung auf das Konto:\nIBAN AT41 2011 1310 0670 0296\nVerwendungszweck: ${invoice.reference}\n\n` +
-      `Bei Rückfragen stehe ich gerne zur Verfügung.\n\nMit besten rotarischen Grüßen,\nDer Schatzmeister\nRotary Club Wien-Donau`;
-    const mail = `mailto:${invoice.memberEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    return mail;
+      `${anrede}\n\n` +
+      `ganz entspannt und unter Freunden: Dein Mitgliedsbeitrag für das Clubjahr ${invoice.clubYearLabel} (${formatEUR(invoice.amount)}) ist bei uns noch nicht eingegangen. In einem vollen Terminkalender geht so etwas leicht unter – daher diese kleine, freundliche Erinnerung.\n\n` +
+      `Du kannst den Betrag ganz bequem auf unser Clubkonto überweisen:\n` +
+      `  IBAN: ${CLUB_IBAN}\n  Verwendungszweck: ${invoice.reference}\n  Betrag: ${formatEUR(invoice.amount)}\n\n` +
+      `Falls Du bereits überwiesen hast, hat sich das hier einfach überschnitten – dann sag mir kurz Bescheid, und ich gleiche es ab.\n\n` +
+      `Herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${CLUB_NAME}`;
+    return `mailto:${invoice.memberEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  // SEPA-Rücklauf: Einzug kam retour → IBAN prüfen + um einmalige Überweisung bitten.
+  function buildReturnMailto() {
+    const subject = `Mitgliedsbeitrag – Lastschrift kam retour (${invoice.reference})`;
+    const ibanZeile = invoice.memberIban
+      ? `  ${invoice.memberIban}`
+      : `  (bei uns ist derzeit keine IBAN hinterlegt)`;
+    const body =
+      `${anrede}\n\n` +
+      `wie jedes Jahr ziehen wir den Mitgliedsbeitrag bequem per SEPA-Lastschrift ein. Bei Dir ist der Einzug für das Clubjahr ${invoice.clubYearLabel} (${formatEUR(invoice.amount)}) allerdings zu uns zurückgekommen.\n\n` +
+      `Wir haben folgende Bankverbindung hinterlegt:\n${ibanZeile}\n\n` +
+      `Darf ich Dich bitten, kurz zu prüfen, ob diese IBAN noch stimmt? Falls sich Deine Bankverbindung geändert hat, gib mir bitte die aktuelle IBAN bekannt – dann klappt der Einzug im nächsten Jahr wieder automatisch.\n\n` +
+      `Für den heurigen Beitrag bitte ich Dich um eine einmalige Überweisung auf unser Clubkonto:\n` +
+      `  IBAN: ${CLUB_IBAN}\n  Verwendungszweck: ${invoice.reference}\n  Betrag: ${formatEUR(invoice.amount)}\n\n` +
+      `Ganz herzlichen Dank und liebe rotarische Grüße\nDein Schatzmeister\n${CLUB_NAME}`;
+    return `mailto:${invoice.memberEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   async function sendInvoice() {
@@ -90,36 +117,35 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     }
   }
 
-  function openOutlookDraft() {
-    // Fertige Mahnung im Standard-Mailprogramm (Outlook) öffnen. Das MUSS
-    // synchron in der Klick-Aktion passieren – nach einem await (Server-Abfrage)
-    // blockiert der Browser das Öffnen als vermeintliches Popup.
+  function openDraft(href: string) {
+    // Fertige Mail im Standard-Mailprogramm (Outlook) öffnen. Das MUSS synchron
+    // in der Klick-Aktion passieren – nach einem await (Server-Abfrage) blockiert
+    // der Browser das Öffnen als vermeintliches Popup.
     const a = document.createElement("a");
-    a.href = buildMailto();
+    a.href = href;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     a.remove();
   }
 
-  async function remind() {
+  async function sendViaOutlook(href: string, confirmText: string, note: string) {
     if (!invoice.memberEmail) {
       alert("Für dieses Mitglied ist keine E-Mail-Adresse hinterlegt. Bitte zuerst beim Mitglied ergänzen.");
       return;
     }
-    // 1) Outlook sofort mit der fertigen Mahnung öffnen (innerhalb der Klick-Aktion).
-    openOutlookDraft();
-    // 2) Erst nach dem tatsächlichen Versand als „gemahnt" markieren.
-    const sent = window.confirm(
-      `Die Mahnung wurde in Outlook geöffnet.\n\n` +
-        `Bitte dort auf „Senden" klicken.\n\n` +
-        `Danach hier mit „OK" bestätigen – dann wird die Forderung als „gemahnt" markiert.\n` +
-        `Falls Outlook nicht aufgegangen ist oder Sie noch nicht gesendet haben: „Abbrechen".`,
-    );
+    // 1) Outlook sofort mit der fertigen Mail öffnen (innerhalb der Klick-Aktion).
+    openDraft(href);
+    // 2) Erst nach dem tatsächlichen Versand vermerken.
+    const sent = window.confirm(confirmText);
     if (!sent) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}/remind`, { method: "POST" });
+      const res = await fetch(`/api/invoices/${invoice.id}/remind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         alert(d?.error ?? `Fehler ${res.status}`);
@@ -129,6 +155,28 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
     } finally {
       setBusy(false);
     }
+  }
+
+  function remind() {
+    return sendViaOutlook(
+      buildMailto(),
+      `Die Erinnerung wurde in Outlook geöffnet.\n\n` +
+        `Bitte dort auf „Senden" klicken.\n\n` +
+        `Danach hier mit „OK" bestätigen – dann wird die Forderung als „gemahnt" markiert.\n` +
+        `Falls Outlook nicht aufgegangen ist oder Sie noch nicht gesendet haben: „Abbrechen".`,
+      "Zahlungserinnerung per E-Mail",
+    );
+  }
+
+  function remindReturn() {
+    return sendViaOutlook(
+      buildReturnMailto(),
+      `Die E-Mail zum Lastschrift-Rücklauf wurde in Outlook geöffnet.\n\n` +
+        `Bitte dort auf „Senden" klicken.\n\n` +
+        `Danach hier mit „OK" bestätigen – dann wird die Forderung als kontaktiert markiert.\n` +
+        `Falls Outlook nicht aufgegangen ist oder Sie noch nicht gesendet haben: „Abbrechen".`,
+      "SEPA-Rücklauf: IBAN-Prüfung & Bitte um Überweisung",
+    );
   }
 
   async function markPaid() {
@@ -172,19 +220,30 @@ export function DuesRowActions({ invoice }: { invoice: { id: string; status: str
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex justify-end gap-1 flex-wrap">
-        {invoice.paymentMethod === "EMAIL_INVOICE" && (
+        {invoice.paymentMethod === "SEPA" ? (
           <button
-            onClick={sendInvoice}
+            onClick={remindReturn}
             disabled={busy}
             className="btn-ghost text-xs px-2 py-1"
-            title={invoice.invoiceSentAt ? `Rechnung erneut senden (zuletzt ${formatDate(invoice.invoiceSentAt)})` : "Rechnung per E-Mail senden"}
+            title="Lastschrift-Rücklauf: E-Mail mit IBAN-Prüfung und Bitte um Überweisung öffnen"
           >
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} {invoice.invoiceSentAt ? "Erneut" : "Rechnung"}
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />} Rücklauf-Mail
           </button>
+        ) : (
+          <>
+            <button
+              onClick={sendInvoice}
+              disabled={busy}
+              className="btn-ghost text-xs px-2 py-1"
+              title={invoice.invoiceSentAt ? `Rechnung erneut senden (zuletzt ${formatDate(invoice.invoiceSentAt)})` : "Rechnung per E-Mail senden"}
+            >
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} {invoice.invoiceSentAt ? "Erneut" : "Rechnung"}
+            </button>
+            <button onClick={remind} disabled={busy} className="btn-ghost text-xs px-2 py-1" title="Freundliche Zahlungserinnerung per E-Mail öffnen">
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />} Erinnern
+            </button>
+          </>
         )}
-        <button onClick={remind} disabled={busy} className="btn-ghost text-xs px-2 py-1" title="Mahn-Mail senden">
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />} Mahnen
-        </button>
         <button onClick={markPaid} disabled={busy} className="btn-ghost text-xs px-2 py-1" title="Als bezahlt markieren">
           <Check className="size-3.5" /> Bezahlt
         </button>
